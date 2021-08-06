@@ -18,14 +18,25 @@ Planner::Planner() {
 
   // ___________________
   // TOPICS TO SUBSCRIBE
-  if (Constants::manual) {
-    subMap = n.subscribe("/map", 1, &Planner::setMap, this);
-  } else {
-    subMap = n.subscribe("/occ_map", 1, &Planner::setMap, this);
-  }
+  sub_occ_grid_ = std::make_shared<SubOccGrid>(n, "/occupy/costmap", 1);
+  sub_pose_stamped_start_ = std::make_shared<SubPoseStamped>(n, "/occupy/pose_stamped_start_hybrid", 1);
+  sub_pose_stamped_goal_ = std::make_shared<SubPoseStamped>(n, "/occupy/pose_stamped_goal_hybrid", 1);
+  sub_transform_stamped_ = std::make_shared<SubTransformStamped>(n, "/occupy/transform_stamped_map_to_gridmap", 1);
 
-  subGoal = n.subscribe("/move_base_simple/goal", 1, &Planner::setGoal, this);
-  subStart = n.subscribe("/initialpose", 1, &Planner::setStart, this);
+  synchronizer_ = std::make_shared<Synchronizer>(
+      SyncPolicy(10),
+      *sub_occ_grid_,
+      *sub_pose_stamped_start_,
+      *sub_pose_stamped_goal_,
+      *sub_transform_stamped_);
+  synchronizer_->registerCallback(
+      boost::bind(
+          &Planner::callback_synchronizer,
+          this,
+          boost::placeholders::_1,
+          boost::placeholders::_2,
+          boost::placeholders::_3,
+          boost::placeholders::_4));
 };
 
 //###################################################
@@ -37,6 +48,21 @@ void Planner::initializeLookups() {
   }
 
   Lookup::collisionLookup(collisionLookup);
+}
+
+void Planner::callback_synchronizer(
+    const nav_msgs::OccupancyGrid::ConstPtr &msg_occ_grid,
+    const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_start,
+    const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_goal,
+    const geometry_msgs::TransformStamped::ConstPtr &msg_transform_stamped) {
+
+  nav_msgs::OccupancyGrid::Ptr msg_occ_grid_ptr = boost::make_shared<nav_msgs::OccupancyGrid>();
+  *msg_occ_grid_ptr = *msg_occ_grid;
+
+  setMap(msg_occ_grid_ptr);
+  setStart(msg_pose_stamped_start);
+  setGoal(msg_pose_stamped_goal);
+  plan();
 }
 
 //###################################################
@@ -68,43 +94,19 @@ void Planner::setMap(const nav_msgs::OccupancyGrid::Ptr map) {
   voronoiDiagram.initializeMap(width, height, binMap);
   voronoiDiagram.update();
   voronoiDiagram.visualize();
-//  ros::Time t1 = ros::Time::now();
-//  ros::Duration d(t1 - t0);
-//  std::cout << "created Voronoi Diagram in ms: " << d * 1000 << std::endl;
-
-  // plan if the switch is not set to manual and a transform is available
-  if (!Constants::manual && listener.canTransform("/map", ros::Time(0), "/base_link", ros::Time(0), "/map", nullptr)) {
-
-    listener.lookupTransform("/map", "/base_link", ros::Time(0), transform);
-
-    // assign the values to start from base_link
-    start.pose.pose.position.x = transform.getOrigin().x();
-    start.pose.pose.position.y = transform.getOrigin().y();
-    tf::quaternionTFToMsg(transform.getRotation(), start.pose.pose.orientation);
-
-    if (grid->info.height >= start.pose.pose.position.y && start.pose.pose.position.y >= 0 &&
-        grid->info.width >= start.pose.pose.position.x && start.pose.pose.position.x >= 0) {
-      // set the start as valid and plan
-      validStart = true;
-    } else {
-      validStart = false;
-    }
-
-    plan();
-  }
 }
 
 //###################################################
 //                                   INITIALIZE START
 //###################################################
-void Planner::setStart(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &initial) {
-  float x = initial->pose.pose.position.x / Constants::cellSize;
-  float y = initial->pose.pose.position.y / Constants::cellSize;
-  float t = tf::getYaw(initial->pose.pose.orientation);
+void Planner::setStart(const geometry_msgs::PoseStamped::ConstPtr &initial) {
+  float x = initial->pose.position.x / Constants::cellSize;
+  float y = initial->pose.position.y / Constants::cellSize;
+  float t = tf::getYaw(initial->pose.orientation);
   // publish the start without covariance for rviz
   geometry_msgs::PoseStamped startN;
-  startN.pose.position = initial->pose.pose.position;
-  startN.pose.orientation = initial->pose.pose.orientation;
+  startN.pose.position = initial->pose.position;
+  startN.pose.orientation = initial->pose.orientation;
   startN.header.frame_id = "map";
   startN.header.stamp = ros::Time::now();
 
@@ -113,8 +115,6 @@ void Planner::setStart(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr 
   if (grid->info.height >= y && y >= 0 && grid->info.width >= x && x >= 0) {
     validStart = true;
     start = *initial;
-
-    if (Constants::manual) { plan(); }
 
     // publish start for RViz
     pubStart.publish(startN);
@@ -137,8 +137,6 @@ void Planner::setGoal(const geometry_msgs::PoseStamped::ConstPtr &end) {
   if (grid->info.height >= y && y >= 0 && grid->info.width >= x && x >= 0) {
     validGoal = true;
     goal = *end;
-
-    if (Constants::manual) { plan(); }
 
   } else {
     std::cout << "invalid goal x:" << x << " y:" << y << " t:" << Helper::toDeg(t) << std::endl;
@@ -177,9 +175,9 @@ void Planner::plan() {
 
     // _________________________
     // retrieving start position
-    x = start.pose.pose.position.x / Constants::cellSize;
-    y = start.pose.pose.position.y / Constants::cellSize;
-    t = tf::getYaw(start.pose.pose.orientation);
+    x = start.pose.position.x / Constants::cellSize;
+    y = start.pose.position.y / Constants::cellSize;
+    t = tf::getYaw(start.pose.orientation);
     // set theta to a value (0,2PI]
     t = Helper::normalizeHeadingRad(t);
     Node3D nStart(x, y, t, 0, 0, nullptr);

@@ -9,6 +9,11 @@
 #include <tf/transform_listener.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <nav_msgs/OccupancyGrid.h>
+
+#include <message_filters/subscriber.h>
+#include <message_filters/synchronizer.h>
+#include <message_filters/sync_policies/exact_time.h>
 
 #include "constants.h"
 #include "helper.h"
@@ -49,7 +54,7 @@ class Planner {
      \brief setStart
      \param start the start pose
   */
-  void setStart(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &start);
+  void setStart(const geometry_msgs::PoseStamped::ConstPtr &start);
 
   /*!
      \brief setGoal
@@ -92,7 +97,7 @@ class Planner {
   /// A pointer to the grid the planner runs on
   nav_msgs::OccupancyGrid::Ptr grid;
   /// The start pose set through RViz
-  geometry_msgs::PoseWithCovarianceStamped start;
+  geometry_msgs::PoseStamped start;
   /// The goal pose set through RViz
   geometry_msgs::PoseStamped goal;
   /// Flags for allowing the planner to plan
@@ -104,6 +109,31 @@ class Planner {
   /// A lookup of analytical solutions (Dubin's paths)
   float *dubinsLookup =
       new float[Constants::headings * Constants::headings * Constants::dubinsWidth * Constants::dubinsWidth];
+
+  // Sync subscribers
+  using SubOccGrid = message_filters::Subscriber<nav_msgs::OccupancyGrid>;
+  using SubPoseStamped = message_filters::Subscriber<geometry_msgs::PoseStamped>;
+  using SubTransformStamped = message_filters::Subscriber<geometry_msgs::TransformStamped>;
+
+  using SyncPolicy = message_filters::sync_policies::ExactTime<nav_msgs::OccupancyGrid,
+                                                               geometry_msgs::PoseStamped,
+                                                               geometry_msgs::PoseStamped,
+                                                               geometry_msgs::TransformStamped>;
+
+  using Synchronizer = message_filters::Synchronizer<SyncPolicy>;
+
+  std::shared_ptr<SubOccGrid> sub_occ_grid_;
+  std::shared_ptr<SubPoseStamped> sub_pose_stamped_start_;
+  std::shared_ptr<SubPoseStamped> sub_pose_stamped_goal_;
+  std::shared_ptr<SubTransformStamped> sub_transform_stamped_;
+
+  std::shared_ptr<Synchronizer> synchronizer_;
+
+  void callback_synchronizer(
+      const nav_msgs::OccupancyGrid::ConstPtr &msg_occ_grid,
+      const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_start,
+      const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_goal,
+      const geometry_msgs::TransformStamped::ConstPtr &msg_transform_stamped);
 };
 }
 #endif // PLANNER_H
