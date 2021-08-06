@@ -37,9 +37,9 @@ class Visualize {
     pubNodes2DCosts = n.advertise<visualization_msgs::MarkerArray>("/visualizeNodes2DCosts", 100);
 
     // CONFIGURE THE CONTAINER
-    poses3D.header.frame_id = "path";
-    poses3Dreverse.header.frame_id = "path";
-    poses2D.header.frame_id = "path";
+    poses3D.header.frame_id = "map";
+    poses3Dreverse.header.frame_id = "map";
+    poses2D.header.frame_id = "map";
   }
 
   // CLEAR VISUALIZATION

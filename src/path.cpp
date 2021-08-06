@@ -83,7 +83,7 @@ void Path::addNode(const Node3D &node, int i) {
     pathNode.action = 3;
   }
 
-  pathNode.header.frame_id = "path";
+  pathNode.header.frame_id = "map";
   pathNode.header.stamp = ros::Time(0);
   pathNode.id = i;
   pathNode.type = visualization_msgs::Marker::SPHERE;
@@ -115,7 +115,7 @@ void Path::addVehicle(const Node3D &node, int i) {
     pathVehicle.action = 3;
   }
 
-  pathVehicle.header.frame_id = "path";
+  pathVehicle.header.frame_id = "map";
   pathVehicle.header.stamp = ros::Time(0);
   pathVehicle.id = i;
   pathVehicle.type = visualization_msgs::Marker::CUBE;

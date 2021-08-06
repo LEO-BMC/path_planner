@@ -41,7 +41,7 @@ class Path {
     pubPathVehicles = n.advertise<visualization_msgs::MarkerArray>(pathVehicleTopic, 1);
 
     // CONFIGURE THE CONTAINER
-    path.header.frame_id = "path";
+    path.header.frame_id = "map";
   }
 
   //  // __________
