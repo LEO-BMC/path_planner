@@ -3,11 +3,11 @@ using namespace HybridAStar;
 //###################################################
 //                                     CUSP DETECTION
 //###################################################
-inline bool isCusp(const std::vector<Node3D>& path, int i) {
-  bool revim2 = path[i - 2].getPrim() > 3 ;
-  bool revim1 = path[i - 1].getPrim() > 3 ;
-  bool revi   = path[i].getPrim() > 3 ;
-  bool revip1 = path[i + 1].getPrim() > 3 ;
+inline bool isCusp(const std::vector<Node3D> &path, int i) {
+  bool revim2 = path[i - 2].getPrim() > 3;
+  bool revim1 = path[i - 1].getPrim() > 3;
+  bool revi = path[i].getPrim() > 3;
+  bool revip1 = path[i + 1].getPrim() > 3;
   //  bool revip2 = path[i + 2].getPrim() > 3 ;
 
   return (revim2 != revim1 || revim1 != revi || revi != revip1);
@@ -15,7 +15,7 @@ inline bool isCusp(const std::vector<Node3D>& path, int i) {
 //###################################################
 //                                SMOOTHING ALGORITHM
 //###################################################
-void Smoother::smoothPath(DynamicVoronoi& voronoi) {
+void Smoother::smoothPath(DynamicVoronoi &voronoi) {
   // load the current voronoi diagram into the smoother
   this->voronoi = voronoi;
   this->width = voronoi.getSizeX();
@@ -67,7 +67,7 @@ void Smoother::smoothPath(DynamicVoronoi& voronoi) {
 
       // ensure that it is on the grid
 
-      xi = xi + alpha * correction/totalWeight;
+      xi = xi + alpha * correction / totalWeight;
       newPath[i].setX(xi.getX());
       newPath[i].setY(xi.getY());
       Vector2D Dxi = xi - xim1;
@@ -81,7 +81,7 @@ void Smoother::smoothPath(DynamicVoronoi& voronoi) {
   path = newPath;
 }
 
-void Smoother::tracePath(const Node3D* node, int i, std::vector<Node3D> path) {
+void Smoother::tracePath(const Node3D *node, int i, std::vector<Node3D> path) {
   if (node == nullptr) {
     this->path = path;
     return;
@@ -100,12 +100,12 @@ Vector2D Smoother::obstacleTerm(Vector2D xi) {
   // the distance to the closest obstacle from the current node
   float obsDst = voronoi.getDistance(xi.getX(), xi.getY());
   // the vector determining where the obstacle is
-  int x = (int)xi.getX();
-  int y = (int)xi.getY();
+  int x = (int) xi.getX();
+  int y = (int) xi.getY();
   // if the node is within the map
   if (x < width && x >= 0 && y < height && y >= 0) {
-    Vector2D obsVct(xi.getX() - voronoi.data[(int)xi.getX()][(int)xi.getY()].obstX,
-                    xi.getY() - voronoi.data[(int)xi.getX()][(int)xi.getY()].obstY);
+    Vector2D obsVct(xi.getX() - voronoi.data[(int) xi.getX()][(int) xi.getY()].obstX,
+                    xi.getY() - voronoi.data[(int) xi.getX()][(int) xi.getY()].obstY);
 
     // the closest obstacle is closer than desired correct the path for that
     if (obsDst < obsDMax) {
@@ -204,13 +204,13 @@ Vector2D Smoother::curvatureTerm(Vector2D xim1, Vector2D xi, Vector2D xip1) {
         Vector2D zeros;
         return zeros;
       }
-      // return gradient of 0
+        // return gradient of 0
       else {
         return gradient;
       }
     }
   }
-  // return gradient of 0
+    // return gradient of 0
   else {
     std::cout << "abs values not larger than 0" << std::endl;
     Vector2D zeros;

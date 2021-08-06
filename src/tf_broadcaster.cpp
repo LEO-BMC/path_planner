@@ -15,7 +15,7 @@ void setMap(const nav_msgs::OccupancyGrid::Ptr map) {
   grid = map;
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   // initiate the broadcaster
   ros::init(argc, argv, "tf_broadcaster");
   ros::NodeHandle n;
@@ -23,7 +23,6 @@ int main(int argc, char** argv) {
   // subscribe to map updates
   ros::Subscriber sub_map = n.subscribe("/occ_map", 1, setMap);
   tf::Pose tfPose;
-
 
   ros::Rate r(100);
   tf::TransformBroadcaster broadcaster;
@@ -36,15 +35,15 @@ int main(int argc, char** argv) {
 
     // odom to map
     broadcaster.sendTransform(
-      tf::StampedTransform(
-        tf::Transform(tf::Quaternion(0, 0, 0, 1), tfPose.getOrigin()),
-        ros::Time::now(), "odom", "map"));
+        tf::StampedTransform(
+            tf::Transform(tf::Quaternion(0, 0, 0, 1), tfPose.getOrigin()),
+            ros::Time::now(), "odom", "map"));
 
     // map to path
     broadcaster.sendTransform(
-      tf::StampedTransform(
-        tf::Transform(tf::Quaternion(0, 0, 0, 1), tf::Vector3(0, 0, 0)),
-        ros::Time::now(), "map", "path"));
+        tf::StampedTransform(
+            tf::Transform(tf::Quaternion(0, 0, 0, 1), tf::Vector3(0, 0, 0)),
+            ros::Time::now(), "map", "path"));
     ros::spinOnce();
     r.sleep();
   }

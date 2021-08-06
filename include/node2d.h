@@ -14,9 +14,9 @@ namespace HybridAStar {
 class Node2D {
  public:
   /// The default constructor for 2D array initialization.
-  Node2D(): Node2D(0, 0, 0, 0, nullptr) {}
+  Node2D() : Node2D(0, 0, 0, 0, nullptr) {}
   /// Constructor for a node with the given arguments
-  Node2D(int x, int y, float g, float h, Node2D* pred) {
+  Node2D(int x, int y, float g, float h, Node2D *pred) {
     this->x = x;
     this->y = y;
     this->g = g;
@@ -41,47 +41,64 @@ class Node2D {
   /// get the index of the node in the 2D array
   int getIdx() const { return idx; }
   /// determine whether the node is open
-  bool  isOpen() const { return o; }
+  bool isOpen() const { return o; }
   /// determine whether the node is closed
-  bool  isClosed() const { return c; }
+  bool isClosed() const { return c; }
   /// determine whether the node is discovered
-  bool  isDiscovered() const { return d; }
+  bool isDiscovered() const { return d; }
   /// get a pointer to the predecessor
-  Node2D* getPred() const { return pred; }
+  Node2D *getPred() const { return pred; }
 
   // SETTER METHODS
   /// set the x position
-  void setX(const int& x) { this->x = x; }
+  void setX(const int &x) { this->x = x; }
   /// set the y position
-  void setY(const int& y) { this->y = y; }
+  void setY(const int &y) { this->y = y; }
   /// set the cost-so-far (real value)
-  void setG(const float& g) { this->g = g; }
+  void setG(const float &g) { this->g = g; }
   /// set the cost-to-come (heuristic value)
-  void setH(const float& h) { this->h = h; }
+  void setH(const float &h) { this->h = h; }
   /// set and get the index of the node in the 2D array
-  int setIdx(int width) { this->idx = y * width + x; return idx;}
+  int setIdx(int width) {
+    this->idx = y * width + x;
+    return idx;
+  }
   /// open the node
-  void open() { o = true; c = false; }
+  void open() {
+    o = true;
+    c = false;
+  }
   /// close the node
-  void close() { c = true; o = false; }
+  void close() {
+    c = true;
+    o = false;
+  }
   /// set the node neither open nor closed
-  void reset() { c = false; o = false; }
+  void reset() {
+    c = false;
+    o = false;
+  }
   /// discover the node
   void discover() { d = true; }
   /// set a pointer to the predecessor of the node
-  void setPred(Node2D* pred) { this->pred = pred; }
+  void setPred(Node2D *pred) { this->pred = pred; }
 
   // UPDATE METHODS
   /// Updates the cost-so-far for the node x' coming from its predecessor. It also discovers the node.
-  void updateG() { g += movementCost(*pred); d = true; }
+  void updateG() {
+    g += movementCost(*pred);
+    d = true;
+  }
   /// Updates the cost-to-go for the node x' to the goal node.
-  void updateH(const Node2D& goal) { h = movementCost(goal); }
+  void updateH(const Node2D &goal) { h = movementCost(goal); }
   /// The heuristic as well as the cost measure.
-  float movementCost(const Node2D& pred) const { return sqrt((x - pred.x) * (x - pred.x) + (y - pred.y) * (y - pred.y)); }
+  float movementCost(const Node2D &pred) const {
+    return sqrt((x - pred.x) * (x - pred.x) + (y - pred.y) * (y - pred.y));
+  }
 
   // CUSTOM OPERATORS
   /// Custom operator to compare nodes. Nodes are equal if their x and y position is the same.
-  bool operator == (const Node2D& rhs) const;
+  bool operator==(const Node2D &rhs) const;
 
   // GRID CHECKING
   /// Validity check to test, whether the node is in the 2D array.
@@ -89,7 +106,7 @@ class Node2D {
 
   // SUCCESSOR CREATION
   /// Creates a successor on a eight-connected grid.
-  Node2D* createSuccessor(const int i);
+  Node2D *createSuccessor(const int i);
 
   // CONSTANT VALUES
   /// Number of possible directions
@@ -117,7 +134,7 @@ class Node2D {
   /// the discovered value
   bool d;
   /// the predecessor pointer
-  Node2D* pred;
+  Node2D *pred;
 };
 }
 #endif // NODE2D_H

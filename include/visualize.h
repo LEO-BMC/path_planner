@@ -46,25 +46,25 @@ class Visualize {
   /// Clears the entire visualization
   void clear();
   /// Clears the 2D visualization
-  void clear2D() {poses2D.poses.clear();}
+  void clear2D() { poses2D.poses.clear(); }
 
   // PUBLISH A SINGLE/ARRAY 3D NODE TO RViz
   /// Publishes a single node to RViz, usually the one currently being expanded
-  void publishNode3DPose(Node3D& node);
+  void publishNode3DPose(Node3D &node);
   /// Publishes all expanded nodes to RViz
-  void publishNode3DPoses(Node3D& node);
+  void publishNode3DPoses(Node3D &node);
   // PUBLISH THE COST FOR A 3D NODE TO RViz
   /// Publishes the minimum of the cost of all nodes in a 2D grid cell
-  void publishNode3DCosts(Node3D* nodes, int width, int height, int depth);
+  void publishNode3DCosts(Node3D *nodes, int width, int height, int depth);
 
   // PUBLISH A SINGEL/ARRAY 2D NODE TO RViz
   /// Publishes a single node to RViz, usually the one currently being expanded
-  void publishNode2DPose(Node2D& node);
+  void publishNode2DPose(Node2D &node);
   /// Publishes all expanded nodes to RViz
-  void publishNode2DPoses(Node2D& node);
+  void publishNode2DPoses(Node2D &node);
   // PUBLISH THE COST FOR A 2D NODE TO RViz
   /// Publishes the minimum of the cost of all nodes in a 2D grid cell
-  void publishNode2DCosts(Node2D* nodes, int width, int height);
+  void publishNode2DCosts(Node2D *nodes, int width, int height);
 
  private:
   /// A handle to the ROS node

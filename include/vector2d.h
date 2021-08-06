@@ -11,23 +11,29 @@ namespace HybridAStar {
 class Vector2D {
  public:
   /// default constructor
-  inline Vector2D(const float x = 0, const float y = 0) { this->x = x; this->y = y; }
+  inline Vector2D(const float x = 0, const float y = 0) {
+    this->x = x;
+    this->y = y;
+  }
   /// a method to multiply a vector by a scalar
-  inline Vector2D operator * (const float k) const { return Vector2D(x * k, y * k); }
+  inline Vector2D operator*(const float k) const { return Vector2D(x * k, y * k); }
   /// a method to divide a vector by a scalar
-  inline Vector2D operator / (const float k) const { return Vector2D(x / k, y / k); }
+  inline Vector2D operator/(const float k) const { return Vector2D(x / k, y / k); }
   /// a method to add a vector to a vector
-  inline Vector2D operator + (const Vector2D& b) const { return Vector2D(x + b.x, y + b.y); }
+  inline Vector2D operator+(const Vector2D &b) const { return Vector2D(x + b.x, y + b.y); }
   /// a method to subtract a vector from a vector
-  inline Vector2D operator - (const Vector2D& b) const { return Vector2D(x - b.x, y - b.y); }
+  inline Vector2D operator-(const Vector2D &b) const { return Vector2D(x - b.x, y - b.y); }
   /// a method to negate a vector
-  inline Vector2D operator - () const  {return Vector2D(-x, -y);}
+  inline Vector2D operator-() const { return Vector2D(-x, -y); }
   /// a convenience method to print a vector
-  friend std::ostream& operator<<(std::ostream& os, const Vector2D& b) {os << "(" << b.x << "|" << b.y << ")"; return os; }
+  friend std::ostream &operator<<(std::ostream &os, const Vector2D &b) {
+    os << "(" << b.x << "|" << b.y << ")";
+    return os;
+  }
   /// a method to calculate the length of the vector
   float length() const { return std::sqrt(std::pow(x, 2) + std::pow(y, 2)); }
   /// a method to calculate the length of the vector
-  float sqlength() const { return x*x + y*y; }
+  float sqlength() const { return x * x + y * y; }
   /// a method to calculate the dot product of two vectors
   float dot(Vector2D b) { return x * b.x + y * b.y; }
   ///a method that returns the orthogonal complement of two vectors
@@ -50,7 +56,7 @@ class Vector2D {
   //  /// the theta part for plotting purposes
   //  float t;
 };
-inline Vector2D operator * (double k, const Vector2D& b) {
+inline Vector2D operator*(double k, const Vector2D &b) {
   return (b * k);
 }
 }

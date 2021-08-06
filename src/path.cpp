@@ -45,7 +45,7 @@ void Path::clear() {
 //###################################################
 // __________
 // TRACE PATH
-void Path::updatePath(const std::vector<Node3D>& nodePath) {
+void Path::updatePath(const std::vector<Node3D> &nodePath) {
   path.header.stamp = ros::Time::now();
   int k = 0;
 
@@ -61,7 +61,7 @@ void Path::updatePath(const std::vector<Node3D>& nodePath) {
 }
 // ___________
 // ADD SEGMENT
-void Path::addSegment(const Node3D& node) {
+void Path::addSegment(const Node3D &node) {
   geometry_msgs::PoseStamped vertex;
   vertex.pose.position.x = node.getX() * Constants::cellSize;
   vertex.pose.position.y = node.getY() * Constants::cellSize;
@@ -75,7 +75,7 @@ void Path::addSegment(const Node3D& node) {
 
 // ________
 // ADD NODE
-void Path::addNode(const Node3D& node, int i) {
+void Path::addNode(const Node3D &node, int i) {
   visualization_msgs::Marker pathNode;
 
   // delete all previous markers
@@ -107,7 +107,7 @@ void Path::addNode(const Node3D& node, int i) {
   pathNodes.markers.push_back(pathNode);
 }
 
-void Path::addVehicle(const Node3D& node, int i) {
+void Path::addVehicle(const Node3D &node, int i) {
   visualization_msgs::Marker pathVehicle;
 
   // delete all previous markersg

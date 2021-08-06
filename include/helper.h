@@ -23,13 +23,13 @@ namespace Helper {
    \param t heading in degrees
 */
 static inline float normalizeHeading(float t) {
-  if ((int)t <= 0 || (int)t >= 360) {
+  if ((int) t <= 0 || (int) t >= 360) {
     if (t < -0.1) {
       t += 360.f;
-    } else if ((int)t >= 360) {
+    } else if ((int) t >= 360) {
       t -= 360.f;
     } else {
-      t =  0;
+      t = 0;
     }
   }
 
@@ -43,11 +43,11 @@ static inline float normalizeHeading(float t) {
 */
 static inline float normalizeHeadingRad(float t) {
   if (t < 0) {
-    t = t - 2.f * M_PI * (int)(t / (2.f * M_PI));
+    t = t - 2.f * M_PI * (int) (t / (2.f * M_PI));
     return 2.f * M_PI + t;
   }
 
-  return t - 2.f * M_PI * (int)(t / (2.f * M_PI));
+  return t - 2.f * M_PI * (int) (t / (2.f * M_PI));
 }
 
 /*!
@@ -56,7 +56,7 @@ static inline float normalizeHeadingRad(float t) {
    \param t heading in deg
 */
 static inline float toDeg(float t) {
-  return normalizeHeadingRad(t) * 180.f / M_PI ;
+  return normalizeHeadingRad(t) * 180.f / M_PI;
 }
 
 /*!

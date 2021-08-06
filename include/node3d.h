@@ -15,9 +15,9 @@ class Node3D {
  public:
 
   /// The default constructor for 3D array initialization
-  Node3D(): Node3D(0, 0, 0, 0, 0, nullptr) {}
+  Node3D() : Node3D(0, 0, 0, 0, 0, nullptr) {}
   /// Constructor for a node with the given arguments
-  Node3D(float x, float y, float t, float g, float h, const Node3D* pred, int prim = 0) {
+  Node3D(float x, float y, float t, float g, float h, const Node3D *pred, int prim = 0) {
     this->x = x;
     this->y = y;
     this->t = t;
@@ -52,27 +52,36 @@ class Node3D {
   /// determine whether the node is closed
   bool isClosed() const { return c; }
   /// determine whether the node is open
-  const Node3D* getPred() const { return pred; }
+  const Node3D *getPred() const { return pred; }
 
   // SETTER METHODS
   /// set the x position
-  void setX(const float& x) { this->x = x; }
+  void setX(const float &x) { this->x = x; }
   /// set the y position
-  void setY(const float& y) { this->y = y; }
+  void setY(const float &y) { this->y = y; }
   /// set the heading theta
-  void setT(const float& t) { this->t = t; }
+  void setT(const float &t) { this->t = t; }
   /// set the cost-so-far (real value)
-  void setG(const float& g) { this->g = g; }
+  void setG(const float &g) { this->g = g; }
   /// set the cost-to-come (heuristic value)
-  void setH(const float& h) { this->h = h; }
+  void setH(const float &h) { this->h = h; }
   /// set and get the index of the node in the 3D grid
-  int setIdx(int width, int height) { this->idx = (int)(t / Constants::deltaHeadingRad) * width * height + (int)(y) * width + (int)(x); return idx;}
+  int setIdx(int width, int height) {
+    this->idx = (int) (t / Constants::deltaHeadingRad) * width * height + (int) (y) * width + (int) (x);
+    return idx;
+  }
   /// open the node
-  void open() { o = true; c = false;}
+  void open() {
+    o = true;
+    c = false;
+  }
   /// close the node
-  void close() { c = true; o = false; }
+  void close() {
+    c = true;
+    o = false;
+  }
   /// set a pointer to the predecessor of the node
-  void setPred(const Node3D* pred) { this->pred = pred; }
+  void setPred(const Node3D *pred) { this->pred = pred; }
 
   // UPDATE METHODS
   /// Updates the cost-so-far for the node x' coming from its predecessor. It also discovers the node.
@@ -80,11 +89,11 @@ class Node3D {
 
   // CUSTOM OPERATORS
   /// Custom operator to compare nodes. Nodes are equal if their x and y position as well as heading is similar.
-  bool operator == (const Node3D& rhs) const;
+  bool operator==(const Node3D &rhs) const;
 
   // RANGE CHECKING
   /// Determines whether it is appropriate to find a analytical solution.
-  bool isInRange(const Node3D& goal) const;
+  bool isInRange(const Node3D &goal) const;
 
   // GRID CHECKING
   /// Validity check to test, whether the node is in the 3D array.
@@ -92,7 +101,7 @@ class Node3D {
 
   // SUCCESSOR CREATION
   /// Creates a successor in the continous space.
-  Node3D* createSuccessor(const int i);
+  Node3D *createSuccessor(const int i);
 
   // CONSTANT VALUES
   /// Number of possible directions
@@ -124,7 +133,7 @@ class Node3D {
   /// the motion primitive of the node
   int prim;
   /// the predecessor pointer
-  const Node3D* pred;
+  const Node3D *pred;
 };
 }
 #endif // NODE3D_H

@@ -10,14 +10,14 @@
 
 namespace HybridAStar {
 namespace {
-inline void getConfiguration(const Node2D* node, float& x, float& y, float& t) {
+inline void getConfiguration(const Node2D *node, float &x, float &y, float &t) {
   x = node->getX();
   y = node->getY();
   // avoid 2D collision checking
   t = 99;
 }
 
-inline void getConfiguration(const Node3D* node, float& x, float& y, float& t) {
+inline void getConfiguration(const Node3D *node, float &x, float &y, float &t) {
   x = node->getX();
   y = node->getY();
   t = node->getT();
@@ -33,12 +33,12 @@ class CollisionDetection {
   /// Constructor
   CollisionDetection();
 
-
   /*!
      \brief evaluates whether the configuration is safe
      \return true if it is traversable, else false
   */
-  template<typename T> bool isTraversable(const T* node) const {
+  template<typename T>
+  bool isTraversable(const T *node) const {
     /* Depending on the used collision checking mechanism this needs to be adjusted
        standard: collision checking using the spatial occupancy enumeration
        other: collision checking using the 2d costmap and the navigation stack
@@ -72,7 +72,7 @@ class CollisionDetection {
      \return the cost of the configuration q of W(q)
      \todo needs to be implemented correctly
   */
-  float configurationCost(float x, float y, float t) const {return 0;}
+  float configurationCost(float x, float y, float t) const { return 0; }
 
   /*!
      \brief Tests whether the configuration q of the robot is in C_free
@@ -86,7 +86,7 @@ class CollisionDetection {
   /*!
      \brief updates the grid with the world map
   */
-  void updateGrid(nav_msgs::OccupancyGrid::Ptr map) {grid = map;}
+  void updateGrid(nav_msgs::OccupancyGrid::Ptr map) { grid = map; }
 
  private:
   /// The occupancy grid

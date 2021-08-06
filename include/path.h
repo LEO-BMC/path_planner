@@ -62,19 +62,19 @@ class Path {
      \brief Adds a segment to the path
      \param node a 3D node
   */
-  void addSegment(const Node3D& node);
+  void addSegment(const Node3D &node);
   /*!
      \brief Adds a node to the path
      \param node a 3D node
      \param i a parameter for counting the number of nodes
   */
-  void addNode(const Node3D& node, int i);
+  void addNode(const Node3D &node, int i);
   /*!
      \brief Adds a vehicle shape to the path
      \param node a 3D node
      \param i a parameter for counting the number of nodes
   */
-  void addVehicle(const Node3D& node, int i);
+  void addVehicle(const Node3D &node, int i);
 
   // ______________
   // PUBLISH METHODS

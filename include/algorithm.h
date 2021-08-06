@@ -41,15 +41,15 @@ class Algorithm {
      \param visualization the visualization object publishing the search to RViz
      \return the pointer to the node satisfying the goal condition
   */
-  static Node3D* hybridAStar(Node3D& start,
-                             const Node3D& goal,
-                             Node3D* nodes3D,
-                             Node2D* nodes2D,
+  static Node3D *hybridAStar(Node3D &start,
+                             const Node3D &goal,
+                             Node3D *nodes3D,
+                             Node2D *nodes2D,
                              int width,
                              int height,
-                             CollisionDetection& configurationSpace,
-                             float* dubinsLookup,
-                             Visualize& visualization);
+                             CollisionDetection &configurationSpace,
+                             float *dubinsLookup,
+                             Visualize &visualization);
 
 };
 }

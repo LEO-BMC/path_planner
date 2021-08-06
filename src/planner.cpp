@@ -54,8 +54,8 @@ void Planner::setMap(const nav_msgs::OccupancyGrid::Ptr map) {
 //  ros::Time t0 = ros::Time::now();
   int height = map->info.height;
   int width = map->info.width;
-  bool** binMap;
-  binMap = new bool*[width];
+  bool **binMap;
+  binMap = new bool *[width];
 
   for (int x = 0; x < width; x++) { binMap[x] = new bool[height]; }
 
@@ -86,7 +86,7 @@ void Planner::setMap(const nav_msgs::OccupancyGrid::Ptr map) {
         grid->info.width >= start.pose.pose.position.x && start.pose.pose.position.x >= 0) {
       // set the start as valid and plan
       validStart = true;
-    } else  {
+    } else {
       validStart = false;
     }
 
@@ -97,7 +97,7 @@ void Planner::setMap(const nav_msgs::OccupancyGrid::Ptr map) {
 //###################################################
 //                                   INITIALIZE START
 //###################################################
-void Planner::setStart(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& initial) {
+void Planner::setStart(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &initial) {
   float x = initial->pose.pose.position.x / Constants::cellSize;
   float y = initial->pose.pose.position.y / Constants::cellSize;
   float t = tf::getYaw(initial->pose.pose.orientation);
@@ -114,7 +114,7 @@ void Planner::setStart(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr&
     validStart = true;
     start = *initial;
 
-    if (Constants::manual) { plan();}
+    if (Constants::manual) { plan(); }
 
     // publish start for RViz
     pubStart.publish(startN);
@@ -126,7 +126,7 @@ void Planner::setStart(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr&
 //###################################################
 //                                    INITIALIZE GOAL
 //###################################################
-void Planner::setGoal(const geometry_msgs::PoseStamped::ConstPtr& end) {
+void Planner::setGoal(const geometry_msgs::PoseStamped::ConstPtr &end) {
   // retrieving goal position
   float x = end->pose.position.x / Constants::cellSize;
   float y = end->pose.position.y / Constants::cellSize;
@@ -138,7 +138,7 @@ void Planner::setGoal(const geometry_msgs::PoseStamped::ConstPtr& end) {
     validGoal = true;
     goal = *end;
 
-    if (Constants::manual) { plan();}
+    if (Constants::manual) { plan(); }
 
   } else {
     std::cout << "invalid goal x:" << x << " y:" << y << " t:" << Helper::toDeg(t) << std::endl;
@@ -159,8 +159,8 @@ void Planner::plan() {
     int depth = Constants::headings;
     int length = width * height * depth;
     // define list pointers and initialize lists
-    Node3D* nodes3D = new Node3D[length]();
-    Node2D* nodes2D = new Node2D[width * height]();
+    Node3D *nodes3D = new Node3D[length]();
+    Node2D *nodes2D = new Node2D[width * height]();
 
     // ________________________
     // retrieving goal position
@@ -198,7 +198,15 @@ void Planner::plan() {
     path.clear();
     smoothedPath.clear();
     // FIND THE PATH
-    Node3D* nSolution = Algorithm::hybridAStar(nStart, nGoal, nodes3D, nodes2D, width, height, configurationSpace, dubinsLookup, visualization);
+    Node3D *nSolution = Algorithm::hybridAStar(nStart,
+                                               nGoal,
+                                               nodes3D,
+                                               nodes2D,
+                                               width,
+                                               height,
+                                               configurationSpace,
+                                               dubinsLookup,
+                                               visualization);
     // TRACE THE PATH
     smoother.tracePath(nSolution);
     // CREATE THE UPDATED PATH
@@ -222,10 +230,8 @@ void Planner::plan() {
     visualization.publishNode3DCosts(nodes3D, width, height, depth);
     visualization.publishNode2DCosts(nodes2D, width, height);
 
-
-
-    delete [] nodes3D;
-    delete [] nodes2D;
+    delete[] nodes3D;
+    delete[] nodes2D;
 
   } else {
     std::cout << "missing goal or start" << std::endl;

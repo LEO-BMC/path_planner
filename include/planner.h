@@ -49,13 +49,13 @@ class Planner {
      \brief setStart
      \param start the start pose
   */
-  void setStart(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& start);
+  void setStart(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &start);
 
   /*!
      \brief setGoal
      \param goal the goal pose
   */
-  void setGoal(const geometry_msgs::PoseStamped::ConstPtr& goal);
+  void setGoal(const geometry_msgs::PoseStamped::ConstPtr &goal);
 
   /*!
      \brief The central function entry point making the necessary preparations to start the planning.
@@ -102,7 +102,8 @@ class Planner {
   /// A lookup table for configurations of the vehicle and their spatial occupancy enumeration
   Constants::config collisionLookup[Constants::headings * Constants::positions];
   /// A lookup of analytical solutions (Dubin's paths)
-  float* dubinsLookup = new float [Constants::headings * Constants::headings * Constants::dubinsWidth * Constants::dubinsWidth];
+  float *dubinsLookup =
+      new float[Constants::headings * Constants::headings * Constants::dubinsWidth * Constants::dubinsWidth];
 };
 }
 #endif // PLANNER_H
