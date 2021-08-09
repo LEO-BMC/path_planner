@@ -79,7 +79,7 @@ static const float cellSize = 0.6;
   \brief [m] --- The tie breaker breaks ties between nodes expanded in the same cell
 
 
-  As the cost-so-far are bigger than the cost-to-come it is reasonbale to believe that the algorithm would prefer the predecessor rather than the successor.
+  As the cost-so-far are bigger than the cost-to-come it is reasonable to believe that the algorithm would prefer the predecessor rather than the successor.
   This would lead to the fact that the successor would never be placed and the the one cell could only expand one node. The tieBreaker artificially increases the cost of the predecessor
   to allow the successor being placed in the same cell.
 */
