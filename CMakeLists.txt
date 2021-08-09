@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
         rospy
         std_msgs
         tf
+        tf2_eigen
         )
 
 set(SOURCES
@@ -48,7 +49,13 @@ set(HEADERS
 add_library(HYAS ${SOURCES} ${HEADERS})
 
 ## Declare a catkin package
-catkin_package()
+catkin_package(CATKIN_DEPENDS
+        roscpp
+        rospy
+        std_msgs
+        tf
+        tf2_eigen
+        )
 
 ## OPEN MOTION PLANNING LIBRARY
 find_package(ompl REQUIRED)

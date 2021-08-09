@@ -11,6 +11,8 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/PoseArray.h>
 #include <visualization_msgs/MarkerArray.h>
+#include <Eigen/Geometry>
+#include <tf2_eigen/tf2_eigen.h>
 
 #include "node3d.h"
 #include "constants.h"
@@ -36,7 +38,7 @@ class Path {
 
     // _________________
     // TOPICS TO PUBLISH
-    pubPath = n.advertise<nav_msgs::Path>(pathTopic, 1);
+    pubPath = n.advertise<geometry_msgs::PoseArray>(pathTopic, 1);
     pubPathNodes = n.advertise<visualization_msgs::MarkerArray>(pathNodesTopic, 1);
     pubPathVehicles = n.advertise<visualization_msgs::MarkerArray>(pathVehicleTopic, 1);
 
@@ -76,13 +78,50 @@ class Path {
   */
   void addVehicle(const Node3D &node, int i);
 
+  void setTransformMatrix(const geometry_msgs::TransformStamped &transform);
+
   // ______________
   // PUBLISH METHODS
 
   /// Clears the path
   void clear();
   /// Publishes the path
-  void publishPath() { pubPath.publish(path); }
+  void publishPath() {
+    auto pose_to_matrix = [](const geometry_msgs::PoseStamped &pose) {
+      Eigen::Matrix4d mat = Eigen::Matrix4d::Identity();
+      const auto &pos = pose.pose.position;
+      const auto &ori = pose.pose.orientation;
+      Eigen::Quaterniond quat(ori.w, ori.x, ori.y, ori.z);
+      mat.topLeftCorner<3, 3>() = quat.toRotationMatrix();
+      mat.topRightCorner<3, 1>() = Eigen::Vector3d(pos.x, pos.y, pos.z);
+      return mat;
+    };
+
+    auto transform_pose = [](const Eigen::Matrix4d &transformed_pose) {
+      geometry_msgs::Pose pose_trans;
+      Eigen::Quaterniond quat(transformed_pose.topLeftCorner<3, 3>());
+      const Eigen::Vector3d &trans = transformed_pose.topRightCorner<3, 1>();
+      pose_trans.position.x = trans.x();
+      pose_trans.position.y = trans.y();
+      pose_trans.position.z = trans.z();
+      pose_trans.orientation.x = quat.x();
+      pose_trans.orientation.y = quat.y();
+      pose_trans.orientation.z = quat.z();
+      pose_trans.orientation.w = quat.w();
+      return pose_trans;
+    };
+
+    geometry_msgs::PoseArray poses;
+    poses.header.frame_id = "base_link";
+    for (auto & pose : path.poses) {
+      auto pose_matrix = pose_to_matrix(pose);
+      auto transformed_pose_matrix = transform_matrix_hybrid_to_base_link.inverse() * pose_matrix;
+      auto transformed_pose = transform_pose(transformed_pose_matrix);
+      poses.poses.push_back(transformed_pose);
+    }
+
+    pubPath.publish(poses);
+  }
   /// Publishes the nodes of the path
   void publishPathNodes() { pubPathNodes.publish(pathNodes); }
   /// Publishes the vehicle along the path
@@ -105,6 +144,8 @@ class Path {
   visualization_msgs::MarkerArray pathVehicles;
   /// Value that indicates that the path is smoothed/post processed
   bool smoothed = false;
+
+  Eigen::Matrix4d transform_matrix_hybrid_to_base_link;
 };
 }
 #endif // PATH_H

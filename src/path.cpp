@@ -59,6 +59,31 @@ void Path::updatePath(const std::vector<Node3D> &nodePath) {
 
   return;
 }
+
+void Path::setTransformMatrix(const geometry_msgs::TransformStamped &transform) {
+  // Creates transform matrix from a transform
+
+  Eigen::Quaterniond q;
+  q.x() = transform.transform.rotation.x;
+  q.y() = transform.transform.rotation.y;
+  q.z() = transform.transform.rotation.z;
+  q.w() = transform.transform.rotation.w;
+
+  auto rotation_matrix_raw = q.normalized().toRotationMatrix();
+  Eigen::Vector3d translation_vector;
+  translation_vector << transform.transform.translation.x,
+      transform.transform.translation.y,
+      transform.transform.translation.z;
+
+  Eigen::Matrix4d transform_matrix;
+  transform_matrix.setIdentity();
+
+  transform_matrix.topLeftCorner(3, 3) = rotation_matrix_raw;
+  transform_matrix.topRightCorner(3, 1) = translation_vector;
+
+  transform_matrix_hybrid_to_base_link = transform_matrix;
+}
+
 // ___________
 // ADD SEGMENT
 void Path::addSegment(const Node3D &node) {

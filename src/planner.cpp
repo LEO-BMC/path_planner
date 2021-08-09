@@ -21,7 +21,7 @@ Planner::Planner() {
   sub_occ_grid_ = std::make_shared<SubOccGrid>(n, "/occupy/costmap", 1);
   sub_pose_stamped_start_ = std::make_shared<SubPoseStamped>(n, "/occupy/pose_stamped_start_hybrid", 1);
   sub_pose_stamped_goal_ = std::make_shared<SubPoseStamped>(n, "/occupy/pose_stamped_goal_hybrid", 1);
-  sub_transform_stamped_ = std::make_shared<SubTransformStamped>(n, "/occupy/transform_stamped_map_to_gridmap", 1);
+  sub_transform_stamped_ = std::make_shared<SubTransformStamped>(n, "/occupy/transform_stamped_hybrid_to_base_link", 1);
 
   synchronizer_ = std::make_shared<Synchronizer>(
       SyncPolicy(10),
@@ -62,6 +62,8 @@ void Planner::callback_synchronizer(
   setMap(msg_occ_grid_ptr);
   setStart(msg_pose_stamped_start);
   setGoal(msg_pose_stamped_goal);
+  path.setTransformMatrix(*msg_transform_stamped);
+  smoothedPath.setTransformMatrix(*msg_transform_stamped);
   plan();
 }
 
