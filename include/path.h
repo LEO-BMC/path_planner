@@ -115,6 +115,7 @@ class Path {
 
     geometry_msgs::PoseArray poses;
     poses.header.frame_id = "base_link";
+    poses.header.stamp = msg_stamp_;
     for (auto & pose : path.poses) {
       auto pose_matrix = pose_to_matrix(pose);
       auto transformed_pose_matrix = transform_matrix_hybrid_to_base_link.inverse() * pose_matrix;
@@ -149,6 +150,7 @@ class Path {
   bool smoothed = false;
 
   Eigen::Matrix4d transform_matrix_hybrid_to_base_link;
+  ros::Time msg_stamp_;
 };
 }
 #endif // PATH_H

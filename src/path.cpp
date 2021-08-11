@@ -82,6 +82,7 @@ void Path::setTransformMatrix(const geometry_msgs::TransformStamped &transform) 
   transform_matrix.topRightCorner(3, 1) = translation_vector;
 
   transform_matrix_hybrid_to_base_link = transform_matrix;
+  msg_stamp_ = transform.header.stamp;
 }
 
 // ___________
