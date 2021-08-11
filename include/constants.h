@@ -29,6 +29,8 @@ namespace Constants {
 // _________________
 // CONFIG FLAGS
 
+// Path density of the output path in meters [m]
+static const float path_density = 1.0;
 /// A flag for additional debugging output via `std::cout`
 static const bool coutDEBUG = false;
 /// A flag for the mode (true = manual; false = dynamic). Manual for static map or dynamic for dynamic map.

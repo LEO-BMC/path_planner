@@ -82,6 +82,10 @@ class Path {
 
   void setTransformMatrix(const geometry_msgs::TransformStamped &transform);
 
+  geometry_msgs::PoseArray path_interpolate_and_fix_orientation(
+      const geometry_msgs::PoseArray &trajectory,
+      const float &path_density);
+
   // ______________
   // PUBLISH METHODS
 
@@ -116,15 +120,19 @@ class Path {
     geometry_msgs::PoseArray poses;
     poses.header.frame_id = "base_link";
     poses.header.stamp = msg_stamp_;
-    for (auto & pose : path.poses) {
+    for (auto &pose : path.poses) {
       auto pose_matrix = pose_to_matrix(pose);
       auto transformed_pose_matrix = transform_matrix_hybrid_to_base_link.inverse() * pose_matrix;
       auto transformed_pose = transform_pose(transformed_pose_matrix);
       poses.poses.push_back(transformed_pose);
     }
 
-    std::reverse(poses.poses.begin(),poses.poses.end());
-    pubPath.publish(poses);
+    std::reverse(poses.poses.begin(), poses.poses.end());
+
+    auto path_interpolated_and_ori_fixed =
+        path_interpolate_and_fix_orientation(poses, HybridAStar::Constants::path_density);
+
+    pubPath.publish(path_interpolated_and_ori_fixed);
   }
   /// Publishes the nodes of the path
   void publishPathNodes() { pubPathNodes.publish(pathNodes); }
