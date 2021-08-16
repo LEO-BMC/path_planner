@@ -4,6 +4,9 @@ project(hybrid_astar)
 set(CMAKE_CXX_STANDARD 14)
 
 set(CMAKE_CXX_FLAGS "-g3 -O3")
+find_package(gflags REQUIRED)
+find_package(folly REQUIRED)
+find_package(yaml-cpp)
 
 find_package(catkin REQUIRED COMPONENTS
         roscpp
@@ -11,6 +14,15 @@ find_package(catkin REQUIRED COMPONENTS
         std_msgs
         tf
         tf2_eigen
+        grid_map_core
+        grid_map_ros
+        grid_map_cv
+        grid_map_filters
+        grid_map_loader
+        grid_map_msgs
+        grid_map_octomap
+        grid_map_rviz_plugin
+        grid_map_visualization
         )
 
 set(SOURCES
@@ -64,16 +76,21 @@ if (NOT OMPL_FOUND)
     message(AUTHOR_WARNING,"Open Motion Planning Library not found")
 endif (NOT OMPL_FOUND)
 
-include_directories(include ${catkin_INCLUDE_DIRS})
-include_directories(include ${OMPL_INCLUDE_DIRS})
-include_directories(include include)
+include_directories(include
+        ${catkin_INCLUDE_DIRS}
+        ${OMPL_INCLUDE_DIRS}
+        ${folly_INCLUDE_DIRS}
+        ${YAML_CPP_INCLUDE_DIRS})
 
 add_executable(tf_broadcaster src/tf_broadcaster.cpp)
 target_link_libraries(tf_broadcaster ${catkin_LIBRARIES})
 
 add_executable(hybrid_astar src/main.cpp ${HEADERS} ${SOURCES})
-target_link_libraries(hybrid_astar ${catkin_LIBRARIES})
-target_link_libraries(hybrid_astar ${OMPL_LIBRARIES})
+target_link_libraries(hybrid_astar ${catkin_LIBRARIES}
+        ${OMPL_LIBRARIES}
+        Folly::folly
+        gflags
+        ${YAML_CPP_LIBRARIES})
 
 install(TARGETS ${PROJECT_NAME} tf_broadcaster
         ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}

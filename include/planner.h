@@ -26,6 +26,10 @@
 #include "visualize.h"
 #include "lookup.h"
 
+#include <grid_map_msgs/GridMap.h>
+#include <folly/Synchronized.h>
+#include <geometry_msgs/Polygon.h>
+
 namespace HybridAStar {
 /*!
    \brief A class that creates the interface for the hybrid A* algorithm.
@@ -129,11 +133,27 @@ class Planner {
 
   std::shared_ptr<Synchronizer> synchronizer_;
 
+  std::shared_ptr<ros::Subscriber> sub_occupancy_grid_;
+
   void callback_synchronizer(
       const nav_msgs::OccupancyGrid::ConstPtr &msg_occ_grid,
       const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_start,
       const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_goal,
       const geometry_msgs::TransformStamped::ConstPtr &msg_transform_stamped);
+
+
+  folly::Synchronized<grid_map_msgs::GridMap::ConstPtr> sync_grid_map_;
+  void callback_grid_map(const grid_map_msgs::GridMap::ConstPtr &msg_grid_map);
+
+  int check_and_get_index_collision(const geometry_msgs::PoseArray& poses,
+                                    const grid_map_msgs::GridMap::ConstPtr& grid_map,
+                                    const geometry_msgs::Polygon& polygon_footprint);
+
+  bool plan(const nav_msgs::OccupancyGrid::Ptr& occupancy_grid,
+            const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_start,
+            const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_goal,
+            geometry_msgs::PoseArray& poses_plan);
+
 };
 }
 #endif // PLANNER_H

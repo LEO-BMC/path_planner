@@ -1,4 +1,5 @@
 #include "planner.h"
+#include <grid_map_msgs/GridMap.h>
 
 using namespace HybridAStar;
 //###################################################
@@ -22,6 +23,12 @@ Planner::Planner() {
   sub_pose_stamped_start_ = std::make_shared<SubPoseStamped>(n, "/occupy/pose_stamped_start_hybrid", 1);
   sub_pose_stamped_goal_ = std::make_shared<SubPoseStamped>(n, "/occupy/pose_stamped_goal_hybrid", 1);
   sub_transform_stamped_ = std::make_shared<SubTransformStamped>(n, "/occupy/transform_stamped_hybrid_to_base_link", 1);
+
+  sub_occupancy_grid_ = std::make_shared<ros::Subscriber>(
+      n.subscribe("/occupy/grid_map_map_builder",
+                  1,
+                  &Planner::callback_grid_map,
+                  this));
 
   synchronizer_ = std::make_shared<Synchronizer>(
       SyncPolicy(10),
@@ -236,4 +243,32 @@ void Planner::plan() {
   } else {
     std::cout << "missing goal or start" << std::endl;
   }
+}
+
+void Planner::callback_grid_map(const grid_map_msgs::GridMap::ConstPtr &msg_grid_map) {
+  auto locked_grid_map = sync_grid_map_.wlock();
+  *locked_grid_map = msg_grid_map;
+}
+
+int Planner::check_and_get_index_collision(const geometry_msgs::PoseArray &poses,
+                                           const grid_map_msgs::GridMap::ConstPtr &grid_map,
+                                           const geometry_msgs::Polygon &polygon_footprint) {
+  return 0;
+}
+
+bool Planner::plan(const nav_msgs::OccupancyGrid::Ptr &occupancy_grid,
+                   const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_start,
+                   const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_goal,
+                   geometry_msgs::PoseArray &poses_plan) {
+
+  // Obtain things in their respective frames and transform them to the hybrid astar frame
+
+  setMap(occupancy_grid);
+  setStart(msg_pose_stamped_start);
+  setGoal(msg_pose_stamped_goal);
+//  path.setTransformMatrix(*msg_transform_stamped);
+//  smoothedPath.setTransformMatrix(*msg_transform_stamped);
+  plan();
+
+  return false;
 }
