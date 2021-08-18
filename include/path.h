@@ -82,9 +82,6 @@ class Path {
 
   void setTransformMatrix(const geometry_msgs::TransformStamped &transform);
 
-  geometry_msgs::PoseArray path_interpolate_and_fix_orientation(
-      const geometry_msgs::PoseArray &trajectory,
-      const float &path_density);
 
   // ______________
   // PUBLISH METHODS
@@ -92,52 +89,16 @@ class Path {
   /// Clears the path
   void clear();
   /// Publishes the path
-  void publishPath() {
-    auto pose_to_matrix = [](const geometry_msgs::PoseStamped &pose) {
-      Eigen::Matrix4d mat = Eigen::Matrix4d::Identity();
-      const auto &pos = pose.pose.position;
-      const auto &ori = pose.pose.orientation;
-      Eigen::Quaterniond quat(ori.w, ori.x, ori.y, ori.z);
-      mat.topLeftCorner<3, 3>() = quat.toRotationMatrix();
-      mat.topRightCorner<3, 1>() = Eigen::Vector3d(pos.x, pos.y, pos.z);
-      return mat;
-    };
-
-    auto transform_pose = [](const Eigen::Matrix4d &transformed_pose) {
-      geometry_msgs::Pose pose_trans;
-      Eigen::Quaterniond quat(transformed_pose.topLeftCorner<3, 3>());
-      const Eigen::Vector3d &trans = transformed_pose.topRightCorner<3, 1>();
-      pose_trans.position.x = trans.x();
-      pose_trans.position.y = trans.y();
-      pose_trans.position.z = trans.z();
-      pose_trans.orientation.x = quat.x();
-      pose_trans.orientation.y = quat.y();
-      pose_trans.orientation.z = quat.z();
-      pose_trans.orientation.w = quat.w();
-      return pose_trans;
-    };
-
-    geometry_msgs::PoseArray poses;
-    poses.header.frame_id = "base_link";
-    poses.header.stamp = msg_stamp_;
-    for (auto &pose : path.poses) {
-      auto pose_matrix = pose_to_matrix(pose);
-      auto transformed_pose_matrix = transform_matrix_hybrid_to_base_link.inverse() * pose_matrix;
-      auto transformed_pose = transform_pose(transformed_pose_matrix);
-      poses.poses.push_back(transformed_pose);
-    }
-
-    std::reverse(poses.poses.begin(), poses.poses.end());
-
-    auto path_interpolated_and_ori_fixed =
-        path_interpolate_and_fix_orientation(poses, HybridAStar::Constants::path_density);
-
-    pubPath.publish(path_interpolated_and_ori_fixed);
+  void publishPath(const geometry_msgs::PoseArray &path_to_publish) {
+    pubPath.publish(path_to_publish);
   }
   /// Publishes the nodes of the path
   void publishPathNodes() { pubPathNodes.publish(pathNodes); }
   /// Publishes the vehicle along the path
   void publishPathVehicles() { pubPathVehicles.publish(pathVehicles); }
+
+  /// Path data structure for visualization
+  nav_msgs::Path path;
 
  private:
   /// A handle to the ROS node
@@ -148,8 +109,6 @@ class Path {
   ros::Publisher pubPathNodes;
   /// Publisher for the vehicle along the path
   ros::Publisher pubPathVehicles;
-  /// Path data structure for visualization
-  nav_msgs::Path path;
   /// Nodes data structure for visualization
   visualization_msgs::MarkerArray pathNodes;
   /// Vehicle data structure for visualization

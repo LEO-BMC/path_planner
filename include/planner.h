@@ -71,6 +71,12 @@ class Planner {
   */
   void plan();
 
+  static geometry_msgs::PoseArray path_interpolate_and_fix_orientation(
+      const geometry_msgs::PoseArray &trajectory,
+      const float &path_density);
+
+  static geometry_msgs::PoseArray convert_path_to_pose_array(const nav_msgs::Path &path_to_convert);
+
  private:
   /// The node handle
   ros::NodeHandle n;
@@ -88,6 +94,8 @@ class Planner {
   tf::StampedTransform transform;
   /// The path produced by the hybrid A* algorithm
   Path path;
+  /// Global path
+  geometry_msgs::PoseArray path_global;
   /// The smoother used for optimizing the path
   Smoother smoother;
   /// The path smoothed and ready for the controller
@@ -133,7 +141,7 @@ class Planner {
 
   std::shared_ptr<Synchronizer> synchronizer_;
 
-  std::shared_ptr<ros::Subscriber> sub_occupancy_grid_;
+  std::shared_ptr<ros::Subscriber> sub_grid_map_;
 
   void callback_synchronizer(
       const nav_msgs::OccupancyGrid::ConstPtr &msg_occ_grid,
@@ -141,18 +149,22 @@ class Planner {
       const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_goal,
       const geometry_msgs::TransformStamped::ConstPtr &msg_transform_stamped);
 
-
   folly::Synchronized<grid_map_msgs::GridMap::ConstPtr> sync_grid_map_;
   void callback_grid_map(const grid_map_msgs::GridMap::ConstPtr &msg_grid_map);
 
-  int check_and_get_index_collision(const geometry_msgs::PoseArray& poses,
-                                    const grid_map_msgs::GridMap::ConstPtr& grid_map,
-                                    const geometry_msgs::Polygon& polygon_footprint);
+  int check_and_get_index_collision(const geometry_msgs::PoseArray &poses,
+                                    const grid_map_msgs::GridMap::ConstPtr &grid_map,
+                                    const geometry_msgs::Polygon &polygon_footprint);
 
-  bool plan(const nav_msgs::OccupancyGrid::Ptr& occupancy_grid,
+  bool plan(const nav_msgs::OccupancyGrid::Ptr &occupancy_grid,
             const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_start,
             const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_goal,
-            geometry_msgs::PoseArray& poses_plan);
+            geometry_msgs::PoseArray &path_planned);
+
+  static geometry_msgs::PoseArray transform_pose_array_to_base_link(const geometry_msgs::PoseArray &pose_array,
+                                                                    const geometry_msgs::TransformStamped &transform);
+
+  static Eigen::Matrix4d create_transform_matrix(const geometry_msgs::TransformStamped &transform);;
 
 };
 }
