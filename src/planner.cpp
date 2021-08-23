@@ -1,28 +1,26 @@
 #include "planner.h"
 #include <grid_map_msgs/GridMap.h>
+#include <grid_map_ros/grid_map_ros.hpp>
+#include <std_msgs/Int32MultiArray.h>
+#include <cavc/polyline.hpp>
 
 using namespace HybridAStar;
 //###################################################
 //                                        CONSTRUCTOR
 //###################################################
 Planner::Planner() {
-  // _____
-  // TODOS
-  //    initializeLookups();
-  // Lookup::collisionLookup(collisionLookup);
-  // ___________________
-  // COLLISION DETECTION
-  //    CollisionDetection configurationSpace;
-  // _________________
+
+  tf_buffer_ = std::make_shared<tf2_ros::Buffer>();
+  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
   // TOPICS TO PUBLISH
   pubStart = n.advertise<geometry_msgs::PoseStamped>("/move_base_simple/start", 1);
 
   // ___________________
   // TOPICS TO SUBSCRIBE
   sub_occ_grid_ = std::make_shared<SubOccGrid>(n, "/occupy/costmap", 1);
-  sub_pose_stamped_start_ = std::make_shared<SubPoseStamped>(n, "/occupy/pose_stamped_start_hybrid", 1);
-  sub_pose_stamped_goal_ = std::make_shared<SubPoseStamped>(n, "/occupy/pose_stamped_goal_hybrid", 1);
-  sub_transform_stamped_ = std::make_shared<SubTransformStamped>(n, "/occupy/transform_stamped_hybrid_to_base_link", 1);
+  sub_pose_stamped_start_ = std::make_shared<SubPoseStamped>(n, "/occupy/pose_stamped_start", 1);
+  sub_pose_stamped_goal_ = std::make_shared<SubPoseStamped>(n, "/occupy/pose_stamped_goal", 1);
 
   sub_grid_map_ = std::make_shared<ros::Subscriber>(
       n.subscribe("/occupy/grid_map_map_builder",
@@ -34,16 +32,17 @@ Planner::Planner() {
       SyncPolicy(10),
       *sub_occ_grid_,
       *sub_pose_stamped_start_,
-      *sub_pose_stamped_goal_,
-      *sub_transform_stamped_);
+      *sub_pose_stamped_goal_);
   synchronizer_->registerCallback(
       boost::bind(
           &Planner::callback_synchronizer,
           this,
           boost::placeholders::_1,
           boost::placeholders::_2,
-          boost::placeholders::_3,
-          boost::placeholders::_4));
+          boost::placeholders::_3));
+
+  calculate_footprint_base();
+  path_global.poses.clear();
 };
 
 //###################################################
@@ -60,35 +59,148 @@ void Planner::initializeLookups() {
 void Planner::callback_synchronizer(
     const nav_msgs::OccupancyGrid::ConstPtr &msg_occ_grid,
     const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_start,
-    const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_goal,
-    const geometry_msgs::TransformStamped::ConstPtr &msg_transform_stamped) {
+    const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_goal) {
+
+  auto locked_grid_map = sync_grid_map_.wlock();
+  grid_map::GridMap grid_map = *locked_grid_map;
+
+  if (grid_map.getLength().isZero(1e-3)) {
+    // Collision check is not possible!
+    return;
+  }
+
+  geometry_msgs::Pose vehicle_pose;
+  if (!get_vehicle_pose(vehicle_pose)) {
+    // Vehicle pose unknown!
+    return;
+  }
 
   nav_msgs::OccupancyGrid::Ptr msg_occ_grid_ptr = boost::make_shared<nav_msgs::OccupancyGrid>();
   *msg_occ_grid_ptr = *msg_occ_grid;
 
-  geometry_msgs::PoseArray path_planned;
-  bool valid_plan;
-  path_global.poses.clear();
-  if (path_global.poses.empty()) {
-    valid_plan = plan(msg_occ_grid_ptr,
-                      msg_pose_stamped_start,
-                      msg_pose_stamped_goal,
-                      path_planned);
-    if (valid_plan) {
-      path_global = transform_pose_array_to_base_link(path_planned,
-                                                      *msg_transform_stamped);
-    }
-  } else {
-    for (int i = 0; i < path_global.poses.size(); ++i) {
-      auto const &pose_c = path_global.poses.at(i);
+//  std::cout << "msg_pose_stamped_start->pose: " << msg_pose_stamped_start->pose << std::endl;
+//  std::cout << "msg_pose_stamped_goal->pose: " << msg_pose_stamped_goal->pose << std::endl;
 
+  auto start_hybrid = transform_grid2hybrid(msg_pose_stamped_start->pose);
+  auto goal_hybrid = transform_grid2hybrid(msg_pose_stamped_goal->pose);
+
+//  std::cout << "start_hybrid: " << start_hybrid << std::endl;
+//  std::cout << "goal_hybrid: " << goal_hybrid << std::endl;
+
+  if (path_global.poses.empty()) {
+
+    geometry_msgs::PoseArray path_planned;
+    auto valid_plan = plan(msg_occ_grid_ptr,
+                           start_hybrid,
+                           goal_hybrid,
+                           path_planned);
+    if (valid_plan) {
+      auto path_fixed = path_interpolate_and_fix_orientation(path_planned, HybridAStar::Constants::path_density);
+      path_global = transform_hybrid2map(path_fixed);
     }
   }
 
-  if (!path_global.poses.empty()) {
-    auto path_interpolated_and_ori_fixed =
-        path_interpolate_and_fix_orientation(path_global, HybridAStar::Constants::path_density);
-    smoothedPath.publishPath(path_interpolated_and_ori_fixed);
+  auto plan_start_index = -99;
+  auto publish_path = false;
+  while (true) {
+
+    if (path_global.poses.empty()) {
+      ROS_WARN("Collision check is not possible!");
+      // Collision check is not possible!
+      break;
+    }
+
+    if (plan_start_index == -1) {
+      ROS_WARN("No viable solution exists!");
+      // No viable solution exists!
+      break;
+    }
+
+    auto path_global_grid_map = transform_pose_array(path_global, "grid_map");
+
+    auto collision_check_result_array = do_collision_check_on_grid_frame(path_global_grid_map,
+                                                                         grid_map,
+                                                                         footprint_base);
+
+    // Calculates distance between two waypoint
+    auto calculate_dist = [](geometry_msgs::Point first_wp, geometry_msgs::Point second_wp) {
+      auto dist_calc = std::sqrt(std::pow((second_wp.y - first_wp.y), 2) + std::pow((second_wp.x - first_wp.x), 2));
+      return dist_calc;
+    };
+
+    auto dist_to_goal = calculate_dist(path_global.poses.back().position,
+                                       transform_hybrid2map(goal_hybrid).position);
+
+    auto dist_to_start = calculate_dist(path_global.poses.front().position,
+                                        transform_hybrid2map(start_hybrid).position);
+
+    auto path_is_clear = true;
+    for (int i = 0; i < collision_check_result_array.data.size(); ++i) {
+      const int &collision_info = collision_check_result_array.data.at(i);
+      if (collision_info == 1) {
+        if (plan_start_index == -99) {
+          plan_start_index = i;
+        }
+        path_is_clear = false;
+        break;
+      }
+    }
+
+    if (dist_to_start >= 2.0) {
+      path_global.poses.clear();
+      publish_path = false;
+      break;
+    } else if (!path_is_clear) {
+      std::cout << "plan_start_index: " << plan_start_index << std::endl;
+      auto recent_start_map = path_global.poses.at(plan_start_index);
+      auto recent_start_hybrid = transform_map2hybrid(recent_start_map);
+
+      path_global.poses.erase(path_global.poses.begin() + plan_start_index, path_global.poses.end());
+
+      geometry_msgs::PoseArray path_planned;
+      auto valid_plan = plan(msg_occ_grid_ptr,
+                             recent_start_hybrid,
+                             goal_hybrid,
+                             path_planned);
+      if (valid_plan) {
+        auto path_fixed = path_interpolate_and_fix_orientation(path_planned, HybridAStar::Constants::path_density);
+        auto new_path_map = transform_hybrid2map(path_fixed);
+
+        path_global.poses.insert(path_global.poses.end(), new_path_map.poses.begin(), new_path_map.poses.end());
+      }
+      plan_start_index--;
+    } else if (dist_to_goal >= 5.0) {
+      geometry_msgs::PoseArray path_planned;
+      auto valid_plan = plan(msg_occ_grid_ptr,
+                             transform_map2hybrid(path_global.poses.back()),
+                             goal_hybrid,
+                             path_planned);
+      if (valid_plan) {
+        auto path_fixed = path_interpolate_and_fix_orientation(path_planned, HybridAStar::Constants::path_density);
+        auto new_path_map = transform_hybrid2map(path_fixed);
+
+        path_global.poses.pop_back();
+        path_global.poses.insert(path_global.poses.end(), new_path_map.poses.begin(), new_path_map.poses.end());
+      }
+    } else {
+      publish_path = true;
+      break;
+    }
+  }
+
+  if (publish_path) {
+    auto clipped_path = path_clip(path_global, vehicle_pose);
+    if (clipped_path.poses.empty()) {
+      return;
+    }
+    path_global.poses.clear();
+    path_global.poses = clipped_path.poses;
+    auto global_path_interpolated_and_ori_fixed =
+        path_interpolate_and_fix_orientation(clipped_path, HybridAStar::Constants::path_density);
+    global_path_interpolated_and_ori_fixed.header.stamp = msg_occ_grid->header.stamp;
+    smoothedPath.publishPath(global_path_interpolated_and_ori_fixed);
+  } else {
+    path_global.poses.clear();
   }
 }
 
@@ -126,14 +238,14 @@ void Planner::setMap(const nav_msgs::OccupancyGrid::Ptr map) {
 //###################################################
 //                                   INITIALIZE START
 //###################################################
-void Planner::setStart(const geometry_msgs::PoseStamped::ConstPtr &initial) {
-  float x = initial->pose.position.x / Constants::cellSize;
-  float y = initial->pose.position.y / Constants::cellSize;
-  float t = tf::getYaw(initial->pose.orientation);
+void Planner::setStart(const geometry_msgs::Pose &initial) {
+  float x = initial.position.x / Constants::cellSize;
+  float y = initial.position.y / Constants::cellSize;
+  float t = tf::getYaw(initial.orientation);
   // publish the start without covariance for rviz
   geometry_msgs::PoseStamped startN;
-  startN.pose.position = initial->pose.position;
-  startN.pose.orientation = initial->pose.orientation;
+  startN.pose.position = initial.position;
+  startN.pose.orientation = initial.orientation;
   startN.header.frame_id = "map";
   startN.header.stamp = ros::Time::now();
 
@@ -141,7 +253,7 @@ void Planner::setStart(const geometry_msgs::PoseStamped::ConstPtr &initial) {
 
   if (grid->info.height >= y && y >= 0 && grid->info.width >= x && x >= 0) {
     validStart = true;
-    start = *initial;
+    start.pose = initial;
 
     // publish start for RViz
     pubStart.publish(startN);
@@ -153,17 +265,17 @@ void Planner::setStart(const geometry_msgs::PoseStamped::ConstPtr &initial) {
 //###################################################
 //                                    INITIALIZE GOAL
 //###################################################
-void Planner::setGoal(const geometry_msgs::PoseStamped::ConstPtr &end) {
+void Planner::setGoal(const geometry_msgs::Pose &end) {
   // retrieving goal position
-  float x = end->pose.position.x / Constants::cellSize;
-  float y = end->pose.position.y / Constants::cellSize;
-  float t = tf::getYaw(end->pose.orientation);
+  float x = end.position.x / Constants::cellSize;
+  float y = end.position.y / Constants::cellSize;
+  float t = tf::getYaw(end.orientation);
 
   std::cout << "I am seeing a new goal x:" << x << " y:" << y << " t:" << Helper::toDeg(t) << std::endl;
 
   if (grid->info.height >= y && y >= 0 && grid->info.width >= x && x >= 0) {
     validGoal = true;
-    goal = *end;
+    goal.pose = end;
 
   } else {
     std::cout << "invalid goal x:" << x << " y:" << y << " t:" << Helper::toDeg(t) << std::endl;
@@ -265,18 +377,133 @@ void Planner::plan() {
 
 void Planner::callback_grid_map(const grid_map_msgs::GridMap::ConstPtr &msg_grid_map) {
   auto locked_grid_map = sync_grid_map_.wlock();
-  *locked_grid_map = msg_grid_map;
+  grid_map::GridMap grid_map;
+  grid_map::GridMapRosConverter::fromMessage(*msg_grid_map, grid_map);
+  *locked_grid_map = grid_map;
+
+  grid_length_x_ = msg_grid_map->info.length_x;
+  grid_length_y_ = msg_grid_map->info.length_y;
 }
 
-int Planner::check_and_get_index_collision(const geometry_msgs::PoseArray &poses,
-                                           const grid_map_msgs::GridMap::ConstPtr &grid_map,
-                                           const geometry_msgs::Polygon &polygon_footprint) {
-  return 0;
+// Return collision check result array ["1" for collision, "0" for collision free]
+std_msgs::Int32MultiArray Planner::do_collision_check_on_grid_frame(const geometry_msgs::PoseArray &trajectory_on_grid_map,
+                                                                    const grid_map::GridMap &grid_map,
+                                                                    const geometry_msgs::Polygon &vehicle_polygon) {
+
+  // Creates transform matrix from a pose to the origin on the same frame
+  auto transform_matrix_to_origin = [](const geometry_msgs::Pose &msg_pose) {
+    Eigen::Quaterniond q;
+    q.x() = msg_pose.orientation.x;
+    q.y() = msg_pose.orientation.y;
+    q.z() = msg_pose.orientation.z;
+    q.w() = msg_pose.orientation.w;
+
+    auto rotation_matrix_raw = q.normalized().toRotationMatrix();
+    Eigen::Vector3d translation_vector;
+    translation_vector << msg_pose.position.x, msg_pose.position.y, msg_pose.position.z;
+
+    Eigen::Matrix4d transform_matrix;
+    transform_matrix.setIdentity();
+
+    transform_matrix.topLeftCorner(3, 3) = rotation_matrix_raw;
+    transform_matrix.topRightCorner(3, 1) = translation_vector;
+    return transform_matrix;
+  };
+
+  // Checks if a polygon on the grid_map frame is collision free
+  auto is_polygon_clear = [grid_map](const geometry_msgs::Polygon &my_polygon) {
+    grid_map::Polygon poly;
+    for (auto const &point : my_polygon.points) {
+      grid_map::Position vertex;
+      vertex.x() = point.x;
+      vertex.y() = point.y;
+      poly.addVertex(vertex);
+    }
+
+    bool is_clear = true;
+    for (grid_map::PolygonIterator iterator(grid_map, poly); !iterator.isPastEnd(); ++iterator) {
+      auto cost = grid_map.at("cost", *iterator);
+      if (cost >= 1.0f) {
+        is_clear = false;
+        break;
+      }
+    }
+    return is_clear;
+  };
+
+  std_msgs::Int32MultiArray collision_check_result_array;
+  visualization_msgs::MarkerArray collision_marker_array;
+  for (int i = 0; i < trajectory_on_grid_map.poses.size(); ++i) {
+    auto const &c_pose = trajectory_on_grid_map.poses.at(i);
+    auto pose_transform_matrix = transform_matrix_to_origin(c_pose);
+
+    geometry_msgs::Polygon transformed_polygon;
+    for (auto &point : vehicle_polygon.points) {
+      Eigen::Vector4d org_point_vector;
+      org_point_vector << point.x, point.y, 0.0, 1.0;
+      Eigen::Vector4d transformed_point_vector;
+      transformed_point_vector = pose_transform_matrix * org_point_vector;
+      geometry_msgs::Point32 transformed_point;
+      transformed_point.x = transformed_point_vector(0);
+      transformed_point.y = transformed_point_vector(1);
+      transformed_polygon.points.push_back(transformed_point);
+    }
+
+//    color::rgb<float> marker_color = color::constant::aquamarine_t();
+//    auto marker_alpha = 0.3f;
+    if (!is_polygon_clear(transformed_polygon)) {
+      collision_check_result_array.data.push_back(1);
+//      marker_color = color::constant::tomato_t();
+//      marker_alpha = 0.7f;
+    } else {
+      collision_check_result_array.data.push_back(0);
+    }
+
+    // Calculate & pub marker array
+//    {
+//      auto vehicle_length = std::abs(vehicle_polygon.points.at(0).x - vehicle_polygon.points.at(2).x);
+//      auto vehicle_width = std::abs(vehicle_polygon.points.at(0).y - vehicle_polygon.points.at(2).y);
+//
+//      float vehicle_base_link_to_back = -1.0f;
+//      for (auto point : vehicle_polygon.points) {
+//        auto x_c = point.x;
+//        if (x_c < 0.0f) {
+//          vehicle_base_link_to_back = std::abs(x_c);
+//          break;
+//        }
+//      }
+//
+//      if (vehicle_base_link_to_back > 0) {
+//        auto marker_origin = c_pose;
+//        auto shift_on_marker_origin_x = vehicle_length / 2.0 - vehicle_base_link_to_back;
+//        Eigen::Vector4d org_shift_vector;
+//        org_shift_vector << shift_on_marker_origin_x, 0.0, 0.0, 1.0;
+//        Eigen::Vector4d transformed_shift_vector;
+//        transformed_shift_vector = pose_transform_matrix * org_shift_vector;
+//        marker_origin.position.x = transformed_shift_vector(0);
+//        marker_origin.position.y = transformed_shift_vector(1);
+//
+//        auto box = marker_handler::make_cube(vehicle_length,
+//                                             vehicle_width,
+//                                             1.0f,
+//                                             marker_origin,
+//                                             marker_color,
+//                                             marker_alpha,
+//                                             "grid_map",
+//                                             trajectory_on_grid_map.header.stamp,
+//                                             38945 + i);
+//
+//        collision_marker_array.markers.push_back(box);
+//      }
+//    }
+  }
+//  pub_collision_check_marker_array_.publish(collision_marker_array);
+  return collision_check_result_array;
 }
 
 bool Planner::plan(const nav_msgs::OccupancyGrid::Ptr &occupancy_grid,
-                   const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_start,
-                   const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_goal,
+                   const geometry_msgs::Pose &msg_pose_stamped_start,
+                   const geometry_msgs::Pose &msg_pose_stamped_goal,
                    geometry_msgs::PoseArray &path_planned) {
 
   setMap(occupancy_grid);
@@ -375,6 +602,61 @@ geometry_msgs::PoseArray Planner::path_interpolate_and_fix_orientation(
   return trajectory_fixed;
 }
 
+geometry_msgs::PoseArray Planner::path_clip(const geometry_msgs::PoseArray &path_to_clip,
+                                            const geometry_msgs::Pose &vehicle_pose) {
+
+  geometry_msgs::PoseArray clipped_path;
+  clipped_path.header = path_to_clip.header;
+
+  if (path_to_clip.poses.empty()) {
+    return clipped_path;
+  }
+
+  cavc::Polyline<float> route;
+  for (auto const &pose_c:path_to_clip.poses) {
+    auto vertex = cavc::PlineVertex<float>(static_cast<float>(pose_c.position.x),
+                                           static_cast<float>(pose_c.position.y),
+                                           0.0f);
+    route.vertexes().push_back(vertex);
+  }
+
+  cavc::ClosestPoint<float> point_closest(
+      route,
+      cavc::Vector2<float>(static_cast<float>(vehicle_pose.position.x),
+                           static_cast<float>(vehicle_pose.position.y)));
+
+  clipped_path.poses.insert(clipped_path.poses.end(),
+                            path_to_clip.poses.begin() + point_closest.index(),
+                            path_to_clip.poses.end());
+
+  return clipped_path;
+}
+
+bool Planner::get_vehicle_pose(geometry_msgs::Pose &vehicle_pose) {
+
+  // Get affine_to_map
+  Eigen::Affine3f affine_to_map;
+  if (!get_affine(affine_to_map,
+                  "base_link",
+                  "map",
+                  ros::Time())) {
+    return false;
+  }
+  const auto &base_link_translation = affine_to_map.translation();
+  const auto &base_link_rotation = affine_to_map.rotation();
+  vehicle_pose.position.x = base_link_translation.x();
+  vehicle_pose.position.y = base_link_translation.y();
+  vehicle_pose.position.z = base_link_translation.z();
+
+  Eigen::Quaternionf base_link_q(base_link_rotation);
+  vehicle_pose.orientation.x = base_link_q.x();
+  vehicle_pose.orientation.y = base_link_q.y();
+  vehicle_pose.orientation.z = base_link_q.z();
+  vehicle_pose.orientation.w = base_link_q.w();
+
+  return true;
+}
+
 geometry_msgs::PoseArray Planner::convert_path_to_pose_array(const nav_msgs::Path &path_to_convert) {
   geometry_msgs::PoseArray pose_array_converted;
   pose_array_converted.header = path_to_convert.header;
@@ -384,22 +666,142 @@ geometry_msgs::PoseArray Planner::convert_path_to_pose_array(const nav_msgs::Pat
   return pose_array_converted;
 }
 
-geometry_msgs::PoseArray Planner::transform_pose_array_to_base_link(const geometry_msgs::PoseArray &pose_array,
-                                                                    const geometry_msgs::TransformStamped &transform) {
+//geometry_msgs::PoseArray Planner::transform_pose_array_to_base_link(const geometry_msgs::PoseArray &pose_array,
+//                                                                    const geometry_msgs::TransformStamped &transform) {
+//  auto pose_to_matrix = [](const geometry_msgs::Pose &pose) {
+//    Eigen::Matrix4d mat = Eigen::Matrix4d::Identity();
+//    const auto &pos = pose.position;
+//    const auto &ori = pose.orientation;
+//    Eigen::Quaterniond quat(ori.w, ori.x, ori.y, ori.z);
+//    mat.topLeftCorner<3, 3>() = quat.toRotationMatrix();
+//    mat.topRightCorner<3, 1>() = Eigen::Vector3d(pos.x, pos.y, pos.z);
+//    return mat;
+//  };
+//
+//  auto transform_pose = [](const Eigen::Matrix4d &transformed_pose) {
+//    geometry_msgs::Pose pose_trans;
+//    Eigen::Quaterniond quat(transformed_pose.topLeftCorner<3, 3>());
+//    const Eigen::Vector3d &trans = transformed_pose.topRightCorner<3, 1>();
+//    pose_trans.position.x = trans.x();
+//    pose_trans.position.y = trans.y();
+//    pose_trans.position.z = trans.z();
+//    pose_trans.orientation.x = quat.x();
+//    pose_trans.orientation.y = quat.y();
+//    pose_trans.orientation.z = quat.z();
+//    pose_trans.orientation.w = quat.w();
+//    return pose_trans;
+//  };
+//
+//  geometry_msgs::PoseArray poses;
+//  poses.header.frame_id = "base_link";
+//  poses.header.stamp = transform.header.stamp;
+//  for (auto &pose : pose_array.poses) {
+//    auto pose_matrix = pose_to_matrix(pose);
+//    auto transformed_pose_matrix = create_transform_matrix(transform).inverse() * pose_matrix;
+//    auto transformed_pose = transform_pose(transformed_pose_matrix);
+//    poses.poses.push_back(transformed_pose);
+//  }
+//  return poses;
+//}
+
+//Eigen::Matrix4d Planner::create_transform_matrix(const geometry_msgs::TransformStamped &transform) {
+//  // Creates transform matrix from a transform
+//
+//  Eigen::Quaterniond q;
+//  q.x() = transform.transform.rotation.x;
+//  q.y() = transform.transform.rotation.y;
+//  q.z() = transform.transform.rotation.z;
+//  q.w() = transform.transform.rotation.w;
+//
+//  auto rotation_matrix_raw = q.normalized().toRotationMatrix();
+//  Eigen::Vector3d translation_vector;
+//  translation_vector << transform.transform.translation.x,
+//      transform.transform.translation.y,
+//      transform.transform.translation.z;
+//
+//  Eigen::Matrix4d transform_matrix;
+//  transform_matrix.setIdentity();
+//
+//  transform_matrix.topLeftCorner(3, 3) = rotation_matrix_raw;
+//  transform_matrix.topRightCorner(3, 1) = translation_vector;
+//
+//  return transform_matrix;
+//}
+
+void Planner::calculate_footprint_base() {
+
+  geometry_msgs::Point32 point_first;
+  geometry_msgs::Point32 point_first_with_safety;
+  point_first.x = Constants::vehicle_base_link_to_front;
+  point_first_with_safety.x = point_first.x + Constants::vehicle_length_safety_dist;
+  point_first.y = -Constants::vehicle_width / 2.0f;
+  point_first_with_safety.y = point_first.y - Constants::vehicle_width_safety_dist;
+  footprint_base.points.push_back(point_first);
+  footprint_with_safety_base.points.push_back(point_first_with_safety);
+
+  geometry_msgs::Point32 point_second;
+  geometry_msgs::Point32 point_second_with_safety;
+  point_second.x = -Constants::vehicle_base_link_to_back;
+  point_second_with_safety.x = point_second.x - Constants::vehicle_length_safety_dist;
+  point_second.y = -Constants::vehicle_width / 2.0f;
+  point_second_with_safety.y = point_second.y - Constants::vehicle_width_safety_dist;
+  footprint_base.points.push_back(point_second);
+  footprint_with_safety_base.points.push_back(point_second_with_safety);
+
+  geometry_msgs::Point32 point_third;
+  geometry_msgs::Point32 point_third_with_safety;
+  point_third.x = -Constants::vehicle_base_link_to_back;
+  point_third_with_safety.x = point_third.x - Constants::vehicle_length_safety_dist;
+  point_third.y = Constants::vehicle_width / 2.0f;
+  point_third_with_safety.y = point_third.y + Constants::vehicle_width_safety_dist;
+  footprint_base.points.push_back(point_third);
+  footprint_with_safety_base.points.push_back(point_third_with_safety);
+
+  geometry_msgs::Point32 point_fourth;
+  geometry_msgs::Point32 point_fourth_with_safety;
+  point_fourth.x = Constants::vehicle_base_link_to_front;
+  point_fourth_with_safety.x = point_fourth.x + Constants::vehicle_length_safety_dist;
+  point_fourth.y = Constants::vehicle_width / 2.0f;
+  point_fourth_with_safety.y = point_fourth.y + Constants::vehicle_width_safety_dist;
+  footprint_base.points.push_back(point_fourth);
+  footprint_with_safety_base.points.push_back(point_fourth_with_safety);
+}
+
+geometry_msgs::PoseArray Planner::transform_pose_array(const geometry_msgs::PoseArray &trajectory,
+                                                       const std::string &target_frame_id) {
+
+  geometry_msgs::PoseArray transformed_trajectory;
+  transformed_trajectory.header = trajectory.header;
+  auto frame_id = trajectory.header.frame_id;
+  if (frame_id == target_frame_id) {
+    transformed_trajectory = trajectory;
+    return transformed_trajectory;
+  }
+
+  Eigen::Affine3f affine_transform;
+  if (!get_affine(affine_transform,
+                  frame_id,
+                  target_frame_id,
+                  ros::Time())) {
+    return transformed_trajectory;
+  }
+
   auto pose_to_matrix = [](const geometry_msgs::Pose &pose) {
-    Eigen::Matrix4d mat = Eigen::Matrix4d::Identity();
+    Eigen::Matrix4f mat = Eigen::Matrix4f::Identity();
     const auto &pos = pose.position;
     const auto &ori = pose.orientation;
-    Eigen::Quaterniond quat(ori.w, ori.x, ori.y, ori.z);
+    Eigen::Quaternionf quat(ori.w, ori.x, ori.y, ori.z);
     mat.topLeftCorner<3, 3>() = quat.toRotationMatrix();
-    mat.topRightCorner<3, 1>() = Eigen::Vector3d(pos.x, pos.y, pos.z);
+    mat.topRightCorner<3, 1>() = Eigen::Vector3f(pos.x, pos.y, pos.z);
     return mat;
   };
 
-  auto transform_pose = [](const Eigen::Matrix4d &transformed_pose) {
+  auto transform_pose = [&pose_to_matrix](const geometry_msgs::Pose &pose, const Eigen::Affine3f &affine) {
     geometry_msgs::Pose pose_trans;
-    Eigen::Quaterniond quat(transformed_pose.topLeftCorner<3, 3>());
-    const Eigen::Vector3d &trans = transformed_pose.topRightCorner<3, 1>();
+    auto mat_pose = pose_to_matrix(pose);
+    Eigen::Matrix4f mat_trans = affine.matrix() * mat_pose;
+    Eigen::Quaternionf quat(mat_trans.topLeftCorner<3, 3>());
+    const Eigen::Vector3f &trans = mat_trans.topRightCorner<3, 1>();
     pose_trans.position.x = trans.x();
     pose_trans.position.y = trans.y();
     pose_trans.position.z = trans.z();
@@ -410,38 +812,151 @@ geometry_msgs::PoseArray Planner::transform_pose_array_to_base_link(const geomet
     return pose_trans;
   };
 
-  geometry_msgs::PoseArray poses;
-  poses.header.frame_id = "base_link";
-  poses.header.stamp = transform.header.stamp;
-  for (auto &pose : pose_array.poses) {
-    auto pose_matrix = pose_to_matrix(pose);
-    auto transformed_pose_matrix = create_transform_matrix(transform).inverse() * pose_matrix;
-    auto transformed_pose = transform_pose(transformed_pose_matrix);
-    poses.poses.push_back(transformed_pose);
+  transformed_trajectory.poses.resize(trajectory.poses.size());
+  std::transform(trajectory.poses.begin(),
+                 trajectory.poses.end(),
+                 transformed_trajectory.poses.begin(),
+                 std::bind(transform_pose, std::placeholders::_1, affine_transform));
+
+  transformed_trajectory.header.frame_id = target_frame_id;
+  return transformed_trajectory;
+}
+
+geometry_msgs::Pose Planner::transform_pose(const geometry_msgs::Pose &pose,
+                                            const std::string &source_frame_id,
+                                            const std::string &target_frame_id) {
+  geometry_msgs::Pose transformed_pose;
+
+  Eigen::Affine3f affine_transform;
+  if (!get_affine(affine_transform,
+                  source_frame_id,
+                  target_frame_id,
+                  ros::Time())) {
+    return transformed_pose;
   }
-  return poses;
+
+  auto pose_to_matrix = [](const geometry_msgs::Pose &pose) {
+    Eigen::Matrix4f mat = Eigen::Matrix4f::Identity();
+    const auto &pos = pose.position;
+    const auto &ori = pose.orientation;
+    Eigen::Quaternionf quat(ori.w, ori.x, ori.y, ori.z);
+    mat.topLeftCorner<3, 3>() = quat.toRotationMatrix();
+    mat.topRightCorner<3, 1>() = Eigen::Vector3f(pos.x, pos.y, pos.z);
+    return mat;
+  };
+
+  auto transform_pose = [&pose_to_matrix](const geometry_msgs::Pose &pose, const Eigen::Affine3f &affine) {
+    geometry_msgs::Pose pose_trans;
+    auto mat_pose = pose_to_matrix(pose);
+    Eigen::Matrix4f mat_trans = affine.matrix() * mat_pose;
+    Eigen::Quaternionf quat(mat_trans.topLeftCorner<3, 3>());
+    const Eigen::Vector3f &trans = mat_trans.topRightCorner<3, 1>();
+    pose_trans.position.x = trans.x();
+    pose_trans.position.y = trans.y();
+    pose_trans.position.z = trans.z();
+    pose_trans.orientation.x = quat.x();
+    pose_trans.orientation.y = quat.y();
+    pose_trans.orientation.z = quat.z();
+    pose_trans.orientation.w = quat.w();
+    return pose_trans;
+  };
+
+  transformed_pose = transform_pose(pose, affine_transform);
+
+  return transformed_pose;
 }
 
-Eigen::Matrix4d Planner::create_transform_matrix(const geometry_msgs::TransformStamped &transform) {
-  // Creates transform matrix from a transform
+bool Planner::get_affine(Eigen::Affine3f &affine,
+                         const std::string &frame_source,
+                         const std::string &frame_target,
+                         const ros::Time &time) {
 
-  Eigen::Quaterniond q;
-  q.x() = transform.transform.rotation.x;
-  q.y() = transform.transform.rotation.y;
-  q.z() = transform.transform.rotation.z;
-  q.w() = transform.transform.rotation.w;
+  auto get_transform_latest = [this, &time](const std::string &source,
+                                            const std::string &target)
+      -> geometry_msgs::TransformStamped::Ptr {
+    geometry_msgs::TransformStamped::Ptr transform_stamped = nullptr;
+    try {
+      transform_stamped.reset(new geometry_msgs::TransformStamped);
 
-  auto rotation_matrix_raw = q.normalized().toRotationMatrix();
-  Eigen::Vector3d translation_vector;
-  translation_vector << transform.transform.translation.x,
-      transform.transform.translation.y,
-      transform.transform.translation.z;
+      *transform_stamped = tf_buffer_->lookupTransform(
+          target,
+          source,
+          time);
+    }
+    catch (tf2::TransformException &ex) {
+      transform_stamped = nullptr;
+      ROS_WARN("%s", ex.what());
+    }
+    return transform_stamped;
+  };
 
-  Eigen::Matrix4d transform_matrix;
-  transform_matrix.setIdentity();
+  geometry_msgs::TransformStamped::Ptr trans_init_ = get_transform_latest(
+      frame_source,
+      frame_target);
+  if (trans_init_ == nullptr) {
+    return false;
+  }
 
-  transform_matrix.topLeftCorner(3, 3) = rotation_matrix_raw;
-  transform_matrix.topRightCorner(3, 1) = translation_vector;
+  affine = tf2::transformToEigen(*trans_init_).cast<float>();
 
-  return transform_matrix;
+  return true;
 }
+
+geometry_msgs::PoseArray Planner::transform_grid2hybrid(const geometry_msgs::PoseArray &pose_array) const {
+  auto pose_array_transformed = pose_array;
+  for (auto &pose:pose_array_transformed.poses) {
+    pose.position.x += grid_length_x_ / 2.0;
+    pose.position.y += grid_length_y_ / 2.0;
+  }
+  pose_array_transformed.header.frame_id = "map";
+  return pose_array_transformed;
+}
+
+geometry_msgs::Pose Planner::transform_grid2hybrid(const geometry_msgs::Pose &pose) const {
+  auto pose_transformed = pose;
+  pose_transformed.position.x += grid_length_x_ / 2.0;
+  pose_transformed.position.y += grid_length_y_ / 2.0;
+  return pose_transformed;
+}
+
+geometry_msgs::PoseArray Planner::transform_hybrid2grid(const geometry_msgs::PoseArray &pose_array) const {
+  auto pose_array_transformed = pose_array;
+  for (auto &pose:pose_array_transformed.poses) {
+    pose.position.x -= grid_length_x_ / 2.0;
+    pose.position.y -= grid_length_y_ / 2.0;
+  }
+  pose_array_transformed.header.frame_id = "grid_map";
+  return pose_array_transformed;
+}
+
+geometry_msgs::Pose Planner::transform_hybrid2grid(const geometry_msgs::Pose &pose) const {
+  auto pose_transformed = pose;
+  pose_transformed.position.x -= grid_length_x_ / 2.0;
+  pose_transformed.position.y -= grid_length_y_ / 2.0;
+  return pose_transformed;
+}
+
+geometry_msgs::PoseArray Planner::transform_map2hybrid(const geometry_msgs::PoseArray &pose_array) {
+  auto pose_array_grid = transform_pose_array(pose_array, "grid_map");
+  auto pose_array_hybrid = transform_grid2hybrid(pose_array_grid);
+  return pose_array_hybrid;
+}
+
+geometry_msgs::Pose Planner::transform_map2hybrid(const geometry_msgs::Pose &pose) {
+  auto pose_grid = transform_pose(pose, "map", "grid_map");
+  auto pose_hybrid = transform_grid2hybrid(pose_grid);
+  return pose_hybrid;
+}
+
+geometry_msgs::PoseArray Planner::transform_hybrid2map(const geometry_msgs::PoseArray &pose_array) {
+  auto pose_array_grid_map = transform_hybrid2grid(pose_array);
+  auto pose_array_map = transform_pose_array(pose_array_grid_map, "map");
+  return pose_array_map;
+}
+
+geometry_msgs::Pose Planner::transform_hybrid2map(const geometry_msgs::Pose &pose) {
+  auto pose_grid_map = transform_hybrid2grid(pose);
+  auto pose_map = transform_pose(pose_grid_map, "grid_map", "map");
+  return pose_map;
+}
+

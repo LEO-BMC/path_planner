@@ -23,6 +23,7 @@ find_package(catkin REQUIRED COMPONENTS
         grid_map_octomap
         grid_map_rviz_plugin
         grid_map_visualization
+        cavc
         )
 
 set(SOURCES
@@ -67,6 +68,7 @@ catkin_package(CATKIN_DEPENDS
         std_msgs
         tf
         tf2_eigen
+        cavc
         )
 
 ## OPEN MOTION PLANNING LIBRARY

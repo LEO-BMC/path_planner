@@ -28,4 +28,6 @@
     <depend>grid_map_rviz_plugin</depend>
     <depend>grid_map_visualization</depend>
 
+    <depend>cavc</depend>
+
 </package>

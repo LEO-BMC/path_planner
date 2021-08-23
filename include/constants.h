@@ -29,8 +29,6 @@ namespace Constants {
 // _________________
 // CONFIG FLAGS
 
-// Path density of the output path in meters [m]
-static const float path_density = 1.0;
 /// A flag for additional debugging output via `std::cout`
 static const bool coutDEBUG = false;
 /// A flag for the mode (true = manual; false = dynamic). Manual for static map or dynamic for dynamic map.
@@ -53,6 +51,19 @@ static const bool dubins = false;
 static const bool dubinsLookup = false && dubins;
 /// A flag to toggle the 2D heuristic (true = on; false = off)
 static const bool twoD = true;
+
+// _________________
+// EXTRA STABLE HYBRID A* COLLISION CHECK CONSTANTS
+
+// Path density of the output path in meters [m]
+static const float path_density = 1.0;
+
+static const float vehicle_base_link = 3.82;           //[m]
+static const float vehicle_base_link_to_back = 0.68;   //[m]
+static const float vehicle_base_link_to_front = 4.82;  //[m]
+static const float vehicle_width = 2.5;                //[m]
+static const float vehicle_length_safety_dist = 0.5;   //[m]
+static const float vehicle_width_safety_dist = 0.3;    //[m]
 
 // _________________
 // GENERAL CONSTANTS
