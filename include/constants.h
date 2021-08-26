@@ -56,7 +56,7 @@ static const bool twoD = true;
 // EXTRA STABLE HYBRID A* COLLISION CHECK CONSTANTS
 
 // Path density of the output path in meters [m]
-static const float path_density = 1.0;
+static const float path_density = 5.0;
 
 static const float vehicle_base_link = 3.82;           //[m]
 static const float vehicle_base_link_to_back = 0.68;   //[m]

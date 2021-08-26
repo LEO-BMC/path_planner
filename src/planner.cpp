@@ -95,7 +95,7 @@ void Planner::callback_synchronizer(
                            goal_hybrid,
                            path_planned);
     if (valid_plan) {
-      auto path_fixed = path_interpolate_and_fix_orientation(path_planned, HybridAStar::Constants::path_density);
+      auto path_fixed = path_interpolate_and_fix_orientation(path_planned, 1.0);
       path_global = transform_hybrid2map(path_fixed);
     }
   }
@@ -163,7 +163,7 @@ void Planner::callback_synchronizer(
                              goal_hybrid,
                              path_planned);
       if (valid_plan) {
-        auto path_fixed = path_interpolate_and_fix_orientation(path_planned, HybridAStar::Constants::path_density);
+        auto path_fixed = path_interpolate_and_fix_orientation(path_planned, 1.0);
         auto new_path_map = transform_hybrid2map(path_fixed);
 
         path_global.poses.insert(path_global.poses.end(), new_path_map.poses.begin(), new_path_map.poses.end());
@@ -176,7 +176,7 @@ void Planner::callback_synchronizer(
                              goal_hybrid,
                              path_planned);
       if (valid_plan) {
-        auto path_fixed = path_interpolate_and_fix_orientation(path_planned, HybridAStar::Constants::path_density);
+        auto path_fixed = path_interpolate_and_fix_orientation(path_planned, 1.0);
         auto new_path_map = transform_hybrid2map(path_fixed);
 
         path_global.poses.pop_back();
@@ -197,6 +197,10 @@ void Planner::callback_synchronizer(
     path_global.poses = clipped_path.poses;
     auto global_path_interpolated_and_ori_fixed =
         path_interpolate_and_fix_orientation(clipped_path, HybridAStar::Constants::path_density);
+
+//    global_path_interpolated_and_ori_fixed.poses.erase(global_path_interpolated_and_ori_fixed.poses.begin(),
+//                                                       global_path_interpolated_and_ori_fixed.poses.begin() + 2);
+
     global_path_interpolated_and_ori_fixed.header.stamp = msg_occ_grid->header.stamp;
     smoothedPath.publishPath(global_path_interpolated_and_ori_fixed);
   } else {
