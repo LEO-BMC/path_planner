@@ -537,7 +537,17 @@ bool Planner::plan(const nav_msgs::OccupancyGrid::Ptr &occupancy_grid,
 //  path.setTransformMatrix(*msg_transform_stamped);
 //  smoothedPath.setTransformMatrix(*msg_transform_stamped);
   plan();
-  if (smoothedPath.path.poses.empty()) {
+
+  // Calculates distance between two waypoint
+  auto calculate_dist = [](geometry_msgs::Point first_wp, geometry_msgs::Point second_wp) {
+    auto dist_calc = std::sqrt(std::pow((second_wp.y - first_wp.y), 2) + std::pow((second_wp.x - first_wp.x), 2));
+    return dist_calc;
+  };
+
+  auto dist_to_goal = calculate_dist(smoothedPath.path.poses.begin()->pose.position,
+                                     msg_pose_stamped_goal.position);
+
+  if (smoothedPath.path.poses.empty() || dist_to_goal > 1.0) {
     return false;
   } else {
     path_planned = convert_path_to_pose_array(smoothedPath.path);

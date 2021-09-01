@@ -71,7 +71,7 @@ static const float vehicle_width_safety_dist = 0.3;    //[m]
 /// [#] --- Limits the maximum search depth of the algorithm, possibly terminating without the solution
 static const int iterations = 30000;
 /// [m] --- Uniformly adds a padding around the vehicle
-static const double bloating = 0.4;
+static const double bloating = 0.1;
 /// [m] --- The width of the vehicle
 static const double width = 2.5 + 2 * bloating;
 /// [m] --- The length of the vehicle
