@@ -135,6 +135,7 @@ class Planner {
 
   double grid_length_x_;
   double grid_length_y_;
+  bool replan_;
 
   /// A lookup table for configurations of the vehicle and their spatial occupancy enumeration
   Constants::config collisionLookup[Constants::headings * Constants::positions];

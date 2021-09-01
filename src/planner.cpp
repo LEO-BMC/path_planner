@@ -43,6 +43,8 @@ Planner::Planner() {
 
   calculate_footprint_base();
   path_global.poses.clear();
+
+  replan_ = false;
 };
 
 //###################################################
@@ -60,6 +62,8 @@ void Planner::callback_synchronizer(
     const nav_msgs::OccupancyGrid::ConstPtr &msg_occ_grid,
     const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_start,
     const geometry_msgs::PoseStamped::ConstPtr &msg_pose_stamped_goal) {
+
+  std::cout << "&&&&&&&&&&&&&&&&&& Callback." << std::endl;
 
   auto locked_grid_map = sync_grid_map_.wlock();
   grid_map::GridMap grid_map = *locked_grid_map;
@@ -87,7 +91,7 @@ void Planner::callback_synchronizer(
 //  std::cout << "start_hybrid: " << start_hybrid << std::endl;
 //  std::cout << "goal_hybrid: " << goal_hybrid << std::endl;
 
-  if (path_global.poses.empty()) {
+  if (path_global.poses.empty() || replan_) {
 
     geometry_msgs::PoseArray path_planned;
     auto valid_plan = plan(msg_occ_grid_ptr,
@@ -96,23 +100,29 @@ void Planner::callback_synchronizer(
                            path_planned);
     if (valid_plan) {
       auto path_fixed = path_interpolate_and_fix_orientation(path_planned, 1.0);
+      path_global.poses.clear();
       path_global = transform_hybrid2map(path_fixed);
     }
+    replan_ = false;
   }
 
   auto plan_start_index = -99;
+  auto plan_start_index_memo = -99;
   auto publish_path = false;
+  std::cout << "********** While start." << std::endl;
   while (true) {
 
-    if (path_global.poses.empty()) {
-      ROS_WARN("Collision check is not possible!");
-      // Collision check is not possible!
-      break;
-    }
+//    std::cout << "path_global.poses.size(): " << path_global.poses.size() << std::endl;
 
     if (plan_start_index == -1) {
       ROS_WARN("No viable solution exists!");
       // No viable solution exists!
+      path_global.poses.erase(path_global.poses.begin() + plan_start_index_memo, path_global.poses.end());
+    }
+
+    if (path_global.poses.empty()) {
+      ROS_WARN("Collision check is not possible!");
+      // Collision check is not possible!
       break;
     }
 
@@ -138,8 +148,10 @@ void Planner::callback_synchronizer(
     for (int i = 0; i < collision_check_result_array.data.size(); ++i) {
       const int &collision_info = collision_check_result_array.data.at(i);
       if (collision_info == 1) {
+        std::cout << "Collision found. Path is not clear!" << std::endl;
         if (plan_start_index == -99) {
           plan_start_index = i;
+          plan_start_index_memo = i;
         }
         path_is_clear = false;
         break;
@@ -147,15 +159,12 @@ void Planner::callback_synchronizer(
     }
 
     if (dist_to_start >= 2.0) {
-      path_global.poses.clear();
-      publish_path = false;
-      break;
-    } else if (!path_is_clear) {
+      replan_ = true;
+    }
+    if (!path_is_clear && plan_start_index != -1) {
       std::cout << "plan_start_index: " << plan_start_index << std::endl;
       auto recent_start_map = path_global.poses.at(plan_start_index);
       auto recent_start_hybrid = transform_map2hybrid(recent_start_map);
-
-      path_global.poses.erase(path_global.poses.begin() + plan_start_index, path_global.poses.end());
 
       geometry_msgs::PoseArray path_planned;
       auto valid_plan = plan(msg_occ_grid_ptr,
@@ -166,31 +175,39 @@ void Planner::callback_synchronizer(
         auto path_fixed = path_interpolate_and_fix_orientation(path_planned, 1.0);
         auto new_path_map = transform_hybrid2map(path_fixed);
 
+        path_global.poses.erase(path_global.poses.begin() + plan_start_index, path_global.poses.end());
         path_global.poses.insert(path_global.poses.end(), new_path_map.poses.begin(), new_path_map.poses.end());
       }
       plan_start_index--;
-    } else if (dist_to_goal >= 5.0) {
-      geometry_msgs::PoseArray path_planned;
-      auto valid_plan = plan(msg_occ_grid_ptr,
-                             transform_map2hybrid(path_global.poses.back()),
-                             goal_hybrid,
-                             path_planned);
-      if (valid_plan) {
-        auto path_fixed = path_interpolate_and_fix_orientation(path_planned, 1.0);
-        auto new_path_map = transform_hybrid2map(path_fixed);
+    }
+    if (path_is_clear) {
+      if (dist_to_goal >= 5.0) {
+        std::cout << "Trying to replan to connect the path to the goal." << std::endl;
+        geometry_msgs::PoseArray path_planned;
+        auto valid_plan = plan(msg_occ_grid_ptr,
+                               transform_map2hybrid(path_global.poses.back()),
+                               goal_hybrid,
+                               path_planned);
+        if (valid_plan) {
+          auto path_fixed = path_interpolate_and_fix_orientation(path_planned, 1.0);
+          auto new_path_map = transform_hybrid2map(path_fixed);
 
-        path_global.poses.pop_back();
-        path_global.poses.insert(path_global.poses.end(), new_path_map.poses.begin(), new_path_map.poses.end());
+          path_global.poses.pop_back();
+          path_global.poses.insert(path_global.poses.end(), new_path_map.poses.begin(), new_path_map.poses.end());
+        }
       }
-    } else {
       publish_path = true;
       break;
     }
+    std::cout << "----------- In while." << std::endl;
   }
+  std::cout << "********** While end." << std::endl;
 
   if (publish_path) {
+    std::cout << "********** Publish path." << std::endl;
     auto clipped_path = path_clip(path_global, vehicle_pose);
     if (clipped_path.poses.empty()) {
+      path_global.poses.clear();
       return;
     }
     path_global.poses.clear();
@@ -198,14 +215,18 @@ void Planner::callback_synchronizer(
     auto global_path_interpolated_and_ori_fixed =
         path_interpolate_and_fix_orientation(clipped_path, HybridAStar::Constants::path_density);
 
-//    global_path_interpolated_and_ori_fixed.poses.erase(global_path_interpolated_and_ori_fixed.poses.begin(),
-//                                                       global_path_interpolated_and_ori_fixed.poses.begin() + 2);
+    if (!global_path_interpolated_and_ori_fixed.poses.empty()) {
+      global_path_interpolated_and_ori_fixed.poses.erase(global_path_interpolated_and_ori_fixed.poses.begin());
+    }
 
     global_path_interpolated_and_ori_fixed.header.stamp = msg_occ_grid->header.stamp;
     smoothedPath.publishPath(global_path_interpolated_and_ori_fixed);
-  } else {
-    path_global.poses.clear();
   }
+//  else {
+//    path_global.poses.clear();
+//  }
+
+  std::cout << "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&." << std::endl;
 }
 
 //###################################################
@@ -629,7 +650,7 @@ geometry_msgs::PoseArray Planner::path_clip(const geometry_msgs::PoseArray &path
       cavc::Vector2<float>(static_cast<float>(vehicle_pose.position.x),
                            static_cast<float>(vehicle_pose.position.y)));
 
-  clipped_path.poses.insert(clipped_path.poses.end(),
+  clipped_path.poses.insert(clipped_path.poses.begin(),
                             path_to_clip.poses.begin() + point_closest.index(),
                             path_to_clip.poses.end());
 
