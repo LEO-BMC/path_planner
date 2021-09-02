@@ -215,9 +215,9 @@ void Planner::callback_synchronizer(
     auto global_path_interpolated_and_ori_fixed =
         path_interpolate_and_fix_orientation(clipped_path, HybridAStar::Constants::path_density);
 
-    if (!global_path_interpolated_and_ori_fixed.poses.empty()) {
-      global_path_interpolated_and_ori_fixed.poses.erase(global_path_interpolated_and_ori_fixed.poses.begin());
-    }
+//    if (!global_path_interpolated_and_ori_fixed.poses.empty()) {
+//      global_path_interpolated_and_ori_fixed.poses.erase(global_path_interpolated_and_ori_fixed.poses.begin());
+//    }
 
     global_path_interpolated_and_ori_fixed.header.stamp = msg_occ_grid->header.stamp;
     smoothedPath.publishPath(global_path_interpolated_and_ori_fixed);
