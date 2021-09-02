@@ -257,7 +257,7 @@ void Planner::setMap(const nav_msgs::OccupancyGrid::Ptr map) {
 
   voronoiDiagram.initializeMap(width, height, binMap);
   voronoiDiagram.update();
-  voronoiDiagram.visualize();
+//  voronoiDiagram.visualize();
 }
 
 //###################################################
