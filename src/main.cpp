@@ -16,6 +16,8 @@
 #include "constants.h"
 #include "planner.h"
 
+#include <signal.h>
+
 //###################################################
 //                              COUT STANDARD MESSAGE
 //###################################################
@@ -42,6 +44,14 @@ void message(const T &msg, T1 val = T1()) {
    \param argv The standard main argument value
    \return 0
 */
+const std::string name_node = "a_star";
+
+void SigHandler(int sig) {
+  std::cerr << name_node + " died with #" + std::to_string(sig) << " - " << strsignal(sig) << std::endl;
+  ros::shutdown();
+  exit(0);
+}
+
 int main(int argc, char **argv) {
 
   message<string, int>("Hybrid A* Search\nA pathfinding algorithm on grids, by Karl Kurzer");
@@ -54,7 +64,40 @@ int main(int argc, char **argv) {
     message("mode: ", "auto");
   }
 
-  ros::init(argc, argv, "a_star");
+  ros::init(argc, argv, name_node);
+
+  std::vector<int> signals{
+      SIGINT,
+      SIGILL,
+      SIGABRT,
+      SIGFPE,
+      SIGSEGV,
+      SIGTERM,
+      SIGHUP,
+      SIGQUIT,
+      SIGTRAP,
+      SIGKILL,
+      SIGBUS,
+      SIGSYS,
+      SIGPIPE,
+      SIGALRM,
+      SIGURG,
+      SIGSTOP,
+      SIGTSTP,
+      SIGCONT,
+      SIGCHLD,
+      SIGTTIN,
+      SIGTTOU,
+      SIGPOLL,
+      SIGXCPU,
+      SIGXFSZ,
+      SIGVTALRM,
+      SIGPROF
+  };
+
+  for (const auto &sig : signals) {
+    signal(sig, SigHandler);
+  }
 
   HybridAStar::Planner hy;
   hy.plan();
