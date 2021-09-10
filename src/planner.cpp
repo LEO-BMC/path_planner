@@ -19,8 +19,8 @@ Planner::Planner() {
   // ___________________
   // TOPICS TO SUBSCRIBE
   sub_occ_grid_ = std::make_shared<SubOccGrid>(n, "/occupy/costmap", 1);
-  sub_pose_stamped_start_ = std::make_shared<SubPoseStamped>(n, "/occupy/pose_stamped_start", 1);
-  sub_pose_stamped_goal_ = std::make_shared<SubPoseStamped>(n, "/occupy/pose_stamped_goal", 1);
+  sub_pose_stamped_start_ = std::make_shared<SubPoseStamped>(n, "/occupy/pose_stamped_start_hybrid", 1);
+  sub_pose_stamped_goal_ = std::make_shared<SubPoseStamped>(n, "/occupy/pose_stamped_goal_hybrid", 1);
 
   sub_grid_map_ = std::make_shared<ros::Subscriber>(
       n.subscribe("/occupy/grid_map_map_builder",
@@ -99,6 +99,7 @@ void Planner::callback_synchronizer(
                            goal_hybrid,
                            path_planned);
     if (valid_plan) {
+      path_planned.poses.insert(path_planned.poses.begin(), transform_map2hybrid(vehicle_pose));
       auto path_fixed = path_interpolate_and_fix_orientation(path_planned, 1.0);
       path_global.poses.clear();
       path_global = transform_hybrid2map(path_fixed);
@@ -118,6 +119,8 @@ void Planner::callback_synchronizer(
       ROS_WARN("No viable solution exists!");
       // No viable solution exists!
       path_global.poses.erase(path_global.poses.begin() + plan_start_index_memo, path_global.poses.end());
+      plan_start_index = -99;
+      plan_start_index_memo = -99;
     }
 
     if (path_global.poses.empty()) {
@@ -142,7 +145,7 @@ void Planner::callback_synchronizer(
                                        transform_hybrid2map(goal_hybrid).position);
 
     auto dist_to_start = calculate_dist(path_global.poses.front().position,
-                                        transform_hybrid2map(start_hybrid).position);
+                                        vehicle_pose.position);
 
     auto path_is_clear = true;
     for (int i = 0; i < collision_check_result_array.data.size(); ++i) {
@@ -215,9 +218,16 @@ void Planner::callback_synchronizer(
     auto global_path_interpolated_and_ori_fixed =
         path_interpolate_and_fix_orientation(clipped_path, HybridAStar::Constants::path_density);
 
-//    if (!global_path_interpolated_and_ori_fixed.poses.empty()) {
-//      global_path_interpolated_and_ori_fixed.poses.erase(global_path_interpolated_and_ori_fixed.poses.begin());
-//    }
+    if (Constants::path_density > 0.0) {
+      auto clip_wp_count =
+          static_cast<int>(std::floor(Constants::path_clip_dist_from_base_link / Constants::path_density));
+
+      if (global_path_interpolated_and_ori_fixed.poses.size() > clip_wp_count) {
+        global_path_interpolated_and_ori_fixed.poses.erase(global_path_interpolated_and_ori_fixed.poses.begin(),
+                                                           global_path_interpolated_and_ori_fixed.poses.begin()
+                                                               + clip_wp_count);
+      }
+    }
 
     global_path_interpolated_and_ori_fixed.header.stamp = msg_occ_grid->header.stamp;
     smoothedPath.publishPath(global_path_interpolated_and_ori_fixed);
@@ -544,10 +554,14 @@ bool Planner::plan(const nav_msgs::OccupancyGrid::Ptr &occupancy_grid,
     return dist_calc;
   };
 
+  if (smoothedPath.path.poses.empty()) {
+    return false;
+  }
+
   auto dist_to_goal = calculate_dist(smoothedPath.path.poses.begin()->pose.position,
                                      msg_pose_stamped_goal.position);
 
-  if (smoothedPath.path.poses.empty() || dist_to_goal > 1.0) {
+  if (dist_to_goal > 1.0) {
     return false;
   } else {
     path_planned = convert_path_to_pose_array(smoothedPath.path);
