@@ -213,7 +213,7 @@ class Planner {
 
   geometry_msgs::Pose transform_hybrid2map(const geometry_msgs::Pose &pose);
 
-  cavc::Polyline<double> path2polyline(const nav_msgs::Path &path_to_convert);
+  static cavc::Polyline<double> pose_array_to_poly_line(const geometry_msgs::PoseArray &array_to_convert);
 };
 }
 #endif // PLANNER_H

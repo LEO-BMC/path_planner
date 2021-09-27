@@ -162,6 +162,21 @@ void Planner::callback_synchronizer(
       }
     }
 
+    auto p_line_path = pose_array_to_poly_line(path_global);
+    cavc::StaticSpatialIndex<double> spacial_index = cavc::createApproxSpatialIndex(p_line_path);
+
+    // Check for self intersection
+    std::vector<cavc::PlineIntersect<double>> self_intersection_result;
+    cavc::allSelfIntersects(p_line_path,
+                            self_intersection_result,
+                            spacial_index);
+    bool self_intersection_found = !self_intersection_result.empty();
+
+    if (self_intersection_found) {
+      replan_ = true;
+      break;
+    }
+
     if (dist_to_start >= 2.0) {
       replan_ = true;
     }
@@ -565,7 +580,7 @@ bool Planner::plan(const nav_msgs::OccupancyGrid::Ptr &occupancy_grid,
   auto reversed_path = smoothedPath.path;
   std::reverse(reversed_path.poses.begin(), reversed_path.poses.end());
 
-  auto p_line_path = path2polyline(reversed_path);
+  auto p_line_path = pose_array_to_poly_line(convert_path_to_pose_array(reversed_path));
   cavc::StaticSpatialIndex<double> spacial_index = cavc::createApproxSpatialIndex(p_line_path);
 
   // Check for self intersection
@@ -1028,11 +1043,11 @@ geometry_msgs::Pose Planner::transform_hybrid2map(const geometry_msgs::Pose &pos
   return pose_map;
 }
 
-cavc::Polyline<double> Planner::path2polyline(const nav_msgs::Path &path_to_convert) {
+cavc::Polyline<double> Planner::pose_array_to_poly_line(const geometry_msgs::PoseArray &array_to_convert) {
   cavc::Polyline<double> output;
 
-  for (auto const &pose: path_to_convert.poses) {
-    output.addVertex(pose.pose.position.x, pose.pose.position.y, 0.0);
+  for (auto const &pose: array_to_convert.poses) {
+    output.addVertex(pose.position.x, pose.position.y, 0.0);
   }
   return output;
 }
