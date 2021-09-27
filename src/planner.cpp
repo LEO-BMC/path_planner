@@ -3,6 +3,7 @@
 #include <grid_map_ros/grid_map_ros.hpp>
 #include <std_msgs/Int32MultiArray.h>
 #include <cavc/polyline.hpp>
+#include <cavc/polylineintersects.hpp>
 
 using namespace HybridAStar;
 //###################################################
@@ -561,6 +562,24 @@ bool Planner::plan(const nav_msgs::OccupancyGrid::Ptr &occupancy_grid,
   auto dist_to_goal = calculate_dist(smoothedPath.path.poses.begin()->pose.position,
                                      msg_pose_stamped_goal.position);
 
+  auto reversed_path = smoothedPath.path;
+  std::reverse(reversed_path.poses.begin(), reversed_path.poses.end());
+
+  auto p_line_path = path2polyline(reversed_path);
+  cavc::StaticSpatialIndex<double> spacial_index = cavc::createApproxSpatialIndex(p_line_path);
+
+  // Check for self intersection
+  std::vector<cavc::PlineIntersect<double>> self_intersection_result;
+  cavc::allSelfIntersects(p_line_path,
+                          self_intersection_result,
+                          spacial_index);
+  bool self_intersection_found = !self_intersection_result.empty();
+
+  if (self_intersection_found) {
+    ROS_WARN("Hybrid A*: Self intersection found! Skipping the calculated path.");
+    return false;
+  }
+
   if (dist_to_goal > 1.0) {
     return false;
   } else {
@@ -1007,5 +1026,14 @@ geometry_msgs::Pose Planner::transform_hybrid2map(const geometry_msgs::Pose &pos
   auto pose_grid_map = transform_hybrid2grid(pose);
   auto pose_map = transform_pose(pose_grid_map, "grid_map", "map");
   return pose_map;
+}
+
+cavc::Polyline<double> Planner::path2polyline(const nav_msgs::Path &path_to_convert) {
+  cavc::Polyline<double> output;
+
+  for (auto const &pose: path_to_convert.poses) {
+    output.addVertex(pose.pose.position.x, pose.pose.position.y, 0.0);
+  }
+  return output;
 }
 

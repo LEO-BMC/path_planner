@@ -32,6 +32,8 @@
 #include <geometry_msgs/Polygon.h>
 #include <std_msgs/Int32MultiArray.h>
 
+#include <cavc/polyline.hpp>
+
 namespace HybridAStar {
 /*!
    \brief A class that creates the interface for the hybrid A* algorithm.
@@ -211,6 +213,7 @@ class Planner {
 
   geometry_msgs::Pose transform_hybrid2map(const geometry_msgs::Pose &pose);
 
+  cavc::Polyline<double> path2polyline(const nav_msgs::Path &path_to_convert);
 };
 }
 #endif // PLANNER_H
