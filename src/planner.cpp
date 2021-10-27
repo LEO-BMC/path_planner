@@ -162,19 +162,21 @@ void Planner::callback_synchronizer(
       }
     }
 
-    auto p_line_path = pose_array_to_poly_line(path_global);
-    cavc::StaticSpatialIndex<double> spacial_index = cavc::createApproxSpatialIndex(p_line_path);
+    if(path_global.poses.size() > 2){
+      auto p_line_path = pose_array_to_poly_line(path_global);
+      cavc::StaticSpatialIndex<double> spacial_index = cavc::createApproxSpatialIndex(p_line_path);
 
-    // Check for self intersection
-    std::vector<cavc::PlineIntersect<double>> self_intersection_result;
-    cavc::allSelfIntersects(p_line_path,
-                            self_intersection_result,
-                            spacial_index);
-    bool self_intersection_found = !self_intersection_result.empty();
+      // Check for self intersection
+      std::vector<cavc::PlineIntersect<double>> self_intersection_result;
+      cavc::allSelfIntersects(p_line_path,
+                              self_intersection_result,
+                              spacial_index);
+      bool self_intersection_found = !self_intersection_result.empty();
 
-    if (self_intersection_found) {
-      replan_ = true;
-      break;
+      if (self_intersection_found) {
+        replan_ = true;
+        break;
+      }
     }
 
     if (dist_to_start >= 2.0) {
